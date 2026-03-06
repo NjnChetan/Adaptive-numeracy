@@ -1,3 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">P1</string>
+
+    <string name="app_name">Adaptive Numeracy</string>
+    <string name="start">Start</string>
+    <string name="back">Back</string>
+
+    <!-- Language List -->
+    <string-array name="languages">
+        <item>English</item>
+        <item>Marathi</item>
+    </string-array>
+
+    <!-- Operation List -->
+    <string-array name="operations">
+        <item>Addition (+)</item>
+        <item>Subtraction (-)</item>
+        <item>Multiplication (×)</item>
+        <item>Division (÷)</item>
+    </string-array>
+
 </resources>

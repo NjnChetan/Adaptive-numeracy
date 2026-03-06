@@ -2,14 +2,17 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:layout_marginTop="40dp">
 
     <!-- Top Row -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:paddingTop="30dp">
 
         <FrameLayout
             android:id="@+id/panel1"
@@ -17,7 +20,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1">
 
-            <include layout="@layout/question_panel"/>
+            <include layout="@layout/question_panel" />
 
         </FrameLayout>
 
@@ -27,13 +30,14 @@
             android:layout_height="match_parent"
             android:layout_weight="1">
 
-            <include layout="@layout/question_panel"/>
+            <include layout="@layout/question_panel" />
 
         </FrameLayout>
 
     </LinearLayout>
 
     <!-- Bottom Row -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -46,7 +50,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1">
 
-            <include layout="@layout/question_panel"/>
+            <include layout="@layout/question_panel" />
 
         </FrameLayout>
 
@@ -56,7 +60,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1">
 
-            <include layout="@layout/question_panel"/>
+            <include layout="@layout/question_panel" />
 
         </FrameLayout>
 
