@@ -1,0 +1,195 @@
+[33mcommit 62192959ec90defae094ab3464f989efd75c08fc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/developer_branch[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mdeveloper_branch[m[33m)[m
+Author: Vishnu-Vijayan-2002 <vishnuvijayan7909@gmail.com>
+Date:   Fri Mar 6 20:32:39 2026 +0530
+
+    UI modification
+
+[1mdiff --git a/.idea/.name b/.idea/.name[m
+[1mnew file mode 100644[m
+[1mindex 0000000..07f32d4[m
+[1m--- /dev/null[m
+[1m+++ b/.idea/.name[m
+[36m@@ -0,0 +1 @@[m
+[32m+[m[32mP1[m
+\ No newline at end of file[m
+[1mdiff --git a/.idea/markdown.xml b/.idea/markdown.xml[m
+[1mnew file mode 100644[m
+[1mindex 0000000..c61ea33[m
+[1m--- /dev/null[m
+[1m+++ b/.idea/markdown.xml[m
+[36m@@ -0,0 +1,8 @@[m
+[32m+[m[32m<?xml version="1.0" encoding="UTF-8"?>[m
+[32m+[m[32m<project version="4">[m
+[32m+[m[32m  <component name="MarkdownSettings">[m
+[32m+[m[32m    <option name="previewPanelProviderInfo">[m
+[32m+[m[32m      <ProviderInfo name="Compose (experimental)" className="com.intellij.markdown.compose.preview.ComposePanelProvider" />[m
+[32m+[m[32m    </option>[m
+[32m+[m[32m  </component>[m
+[32m+[m[32m</project>[m
+\ No newline at end of file[m
+[1mdiff --git a/.idea/misc.xml b/.idea/misc.xml[m
+[1mindex 74dd639..857f037 100644[m
+[1m--- a/.idea/misc.xml[m
+[1m+++ b/.idea/misc.xml[m
+[36m@@ -1,4 +1,3 @@[m
+[31m-<?xml version="1.0" encoding="UTF-8"?>[m
+ <project version="4">[m
+   <component name="ExternalStorageConfigurationManager" enabled="true" />[m
+   <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="jbr-21" project-jdk-type="JavaSDK">[m
+[36m@@ -7,4 +6,11 @@[m
+   <component name="ProjectType">[m
+     <option name="id" value="Android" />[m
+   </component>[m
+[32m+[m[32m  <component name="VisualizationToolProject">[m
+[32m+[m[32m    <option name="state">[m
+[32m+[m[32m      <ProjectState>[m
+[32m+[m[32m        <option name="scale" value="0.158837890625" />[m
+[32m+[m[32m      </ProjectState>[m
+[32m+[m[32m    </option>[m
+[32m+[m[32m  </component>[m
+ </project>[m
+\ No newline at end of file[m
+[1mdiff --git a/.idea/vcs.xml b/.idea/vcs.xml[m
+[1mnew file mode 100644[m
+[1mindex 0000000..35eb1dd[m
+[1m--- /dev/null[m
+[1m+++ b/.idea/vcs.xml[m
+[36m@@ -0,0 +1,6 @@[m
+[32m+[m[32m<?xml version="1.0" encoding="UTF-8"?>[m
+[32m+[m[32m<project version="4">[m
+[32m+[m[32m  <component name="VcsDirectoryMappings">[m
+[32m+[m[32m    <mapping directory="" vcs="Git" />[m
+[32m+[m[32m  </component>[m
+[32m+[m[32m</project>[m
+\ No newline at end of file[m
+[1mdiff --git a/app/build.gradle.kts b/app/build.gradle.kts[m
+[1mindex ae811c1..a3bb4ab 100644[m
+[1m--- a/app/build.gradle.kts[m
+[1m+++ b/app/build.gradle.kts[m
+[36m@@ -39,9 +39,12 @@[m [mdependencies {[m
+ [m
+     implementation(libs.androidx.core.ktx)[m
+     implementation(libs.androidx.appcompat)[m
+[31m-    implementation(libs.material)[m
+[32m+[m
+[32m+[m[32m    implementation("com.google.android.material:material:1.11.0")[m
+[32m+[m
+     implementation(libs.androidx.activity)[m
+     implementation(libs.androidx.constraintlayout)[m
+[32m+[m
+     testImplementation(libs.junit)[m
+     androidTestImplementation(libs.androidx.junit)[m
+     androidTestImplementation(libs.androidx.espresso.core)[m
+[1mdiff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml[m
+[1mindex 64aba3e..130e8fe 100644[m
+[1m--- a/app/src/main/AndroidManifest.xml[m
+[1m+++ b/app/src/main/AndroidManifest.xml[m
+[36m@@ -1,25 +1,27 @@[m
+ <?xml version="1.0" encoding="utf-8"?>[m
+[32m+[m
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"[m
+[31m-    xmlns:tools="http://schemas.android.com/tools">[m
+[32m+[m[32m    package="com.example.p1">[m
+ [m
+     <application[m
+         android:allowBackup="true"[m
+[31m-        android:dataExtractionRules="@xml/data_extraction_rules"[m
+[31m-        android:fullBackupContent="@xml/backup_rules"[m
+         android:icon="@mipmap/ic_launcher"[m
+         android:label="@string/app_name"[m
+         android:roundIcon="@mipmap/ic_launcher_round"[m
+         android:supportsRtl="true"[m
+         android:theme="@style/Theme.P1">[m
+[32m+[m
+         <activity[m
+             android:name=".MainActivity"[m
+             android:exported="true">[m
+[32m+[m
+             <intent-filter>[m
+                 <action android:name="android.intent.action.MAIN" />[m
+[31m-[m
+                 <category android:name="android.intent.category.LAUNCHER" />[m
+             </intent-filter>[m
+[32m+[m
+         </activity>[m
+[32m+[m
+     </application>[m
+ [m
+ </manifest>[m
+\ No newline at end of file[m
+[1mdiff --git a/app/src/main/java/com/example/p1/MainActivity.kt b/app/src/main/java/com/example/p1/MainActivity.kt[m
+[1mindex 4a6a061..cf7748b 100644[m
+[1m--- a/app/src/main/java/com/example/p1/MainActivity.kt[m
+[1m+++ b/app/src/main/java/com/example/p1/MainActivity.kt[m
+[36m@@ -12,6 +12,7 @@[m [mclass MainActivity : AppCompatActivity() {[m
+ [m
+     override fun onCreate(savedInstanceState: Bundle?) {[m
+         super.onCreate(savedInstanceState)[m
+[32m+[m
+         setContentView(R.layout.activity_main)[m
+ [m
+         setupPanel(R.id.panel1, engines[0])[m
+[36m@@ -19,26 +20,40 @@[m [mclass MainActivity : AppCompatActivity() {[m
+         setupPanel(R.id.panel3, engines[2])[m
+         setupPanel(R.id.panel4, engines[3])[m
+     }[m
+[32m+[m
+     private fun setupPanel(panelId: Int, engine: AdaptiveEngine) {[m
+ [m
+[31m-        val panel = findViewById<View>(panelId)[m
+[32m+[m[32m        val panel = findViewById<View>(panelId) ?: return[m
+[32m+[m
+[32m+[m[32m        val homeLayout = panel.findViewById<View>(R.id.homeLayout) ?: return[m
+[32m+[m[32m        val quizLayout = panel.findViewById<View>(R.id.quizLayout) ?: return[m
+[32m+[m
+[32m+[m[32m        val startBtn = panel.findViewById<Button>(R.id.startBtn) ?: return[m
+[32m+[m[32m        val backBtn = panel.findViewById<Button>(R.id.backBtn) ?: return[m
+[32m+[m
+[32m+[m[32m        val questionText = panel.findViewById<TextView>(R.id.questionText) ?: return[m
+ [m
+[31m-        val questionText = panel.findViewById<TextView>(R.id.questionText)[m
+[31m-        val option1 = panel.findViewById<Button>(R.id.option1)[m
+[31m-        val option2 = panel.findViewById<Button>(R.id.option2)[m
+[31m-        val option3 = panel.findViewById<Button>(R.id.option3)[m
+[31m-        val option4 = panel.findViewById<Button>(R.id.option4)[m
+[32m+[m[32m        val option1 = panel.findViewById<Button>(R.id.option1) ?: return[m
+[32m+[m[32m        val option2 = panel.findViewById<Button>(R.id.option2) ?: return[m
+[32m+[m[32m        val option3 = panel.findViewById<Button>(R.id.option3) ?: return[m
+[32m+[m[32m        val option4 = panel.findViewById<Button>(R.id.option4) ?: return[m
+ [m
+         val buttons = listOf(option1, option2, option3, option4)[m
+ [m
+         fun loadQuestion() {[m
+[32m+[m
+             val (question, answers) = engine.generateQuestion()[m
+[32m+[m
+             questionText.text = question[m
+ [m
+             for (i in buttons.indices) {[m
+[32m+[m
+                 buttons[i].text = answers[i].toString()[m
+[32m+[m
+                 buttons[i].setOnClickListener {[m
+[32m+[m
+                     val feedback = engine.submitAnswer(answers[i])[m
+[32m+[m
+                     questionText.text = feedback[m
+ [m
+                     questionText.postDelayed({[m
+[36m@@ -48,5 +63,18 @@[m [mclass MainActivity : AppCompatActivity() {[m
+             }[m
+         }[m
+ [m
+[31m-        loadQuestion()[m
+[31m-    }}[m
+[32m+[m[32m        startBtn.setOnClickListener {[m
+[32m+[m
+[32m+[m[32m            homeLayout.visibility = View.GONE[m
+[32m+[m[32m            quizLayout.visibility = View.VISIBLE[m
+[32m+[m
+[32m+[m[32m            loadQuestion()[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        backBtn.setOnClickListener {[m
+[32m+[m
+[32m
