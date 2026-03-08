@@ -1,57 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  res/layout/question_panel.xml
+
+  Two states controlled by MainActivity:
+    homeLayout  → visible on launch  (language/operation pickers + Start)
+    quizLayout  → visible during quiz (score badge + question card + buttons + nav)
+
+  All buttons use MaterialButton + app:backgroundTint to avoid the Material
+  theme overriding colours with colorPrimary (which defaults to red/pink in
+  new projects).
+-->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="10dp">
+    android:background="#EDEEFF">
 
+    <!-- ══════════════════════════════════════════════════════════════
+         HOME / SETUP SCREEN
+    ══════════════════════════════════════════════════════════════════ -->
     <LinearLayout
         android:id="@+id/homeLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
+        android:padding="12dp"
         android:visibility="visible">
 
         <TextView
-            android:text="Training Panel"
-            android:textStyle="bold"
-            android:textSize="20sp"
-            android:layout_marginBottom="20dp"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="Training Panel"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A2E" />
 
         <TextView
-            android:text="Select Language:"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:text="Select Language:"
+            android:textSize="12sp"
+            android:textColor="#333355" />
 
         <Spinner
             android:id="@+id/languageSpinner"
-            android:layout_width="200dp"
+            android:layout_width="180dp"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="15dp"
-            android:entries="@array/languages"/>
+            android:layout_marginBottom="10dp"
+            android:entries="@array/languages" />
 
         <TextView
-            android:text="Select Operation:"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:text="Select Operation:"
+            android:textSize="12sp"
+            android:textColor="#333355" />
 
         <Spinner
             android:id="@+id/operationSpinner"
-            android:layout_width="200dp"
+            android:layout_width="180dp"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:entries="@array/operations"/>
+            android:layout_marginBottom="16dp"
+            android:entries="@array/operations" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/startBtn"
-            android:text="Start"
+            style="@style/Widget.MaterialComponents.Button"
             android:layout_width="120dp"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:text="Start"
+            android:textColor="#FFFFFF"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:backgroundTint="#2B3A8C"
+            app:cornerRadius="50dp" />
 
     </LinearLayout>
 
+    <!-- ══════════════════════════════════════════════════════════════
+         QUIZ SCREEN
+    ══════════════════════════════════════════════════════════════════ -->
     <LinearLayout
         android:id="@+id/quizLayout"
         android:layout_width="match_parent"
@@ -59,40 +90,220 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/questionText"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:layout_marginBottom="6dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <Button
-            android:id="@+id/option1"
+        <!-- Main content: score badge + question card + answer buttons -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#EDEEFF">
 
-        <Button
-            android:id="@+id/option2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            <!-- Score badge: dark navy, top-left
+                 backgroundTint="@null" prevents theme from tinting it red -->
+            <TextView
+                android:id="@+id/scoreText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0/0"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingStart="9dp"
+                android:paddingEnd="9dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:layout_margin="8dp"
+                android:background="#1A2560"
+                android:backgroundTint="#1A2560"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent" />
 
-        <Button
-            android:id="@+id/option3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            <!-- White question card -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/questionCard"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="6dp"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:layout_constraintTop_toBottomOf="@id/scoreText"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/btnRow1">
 
-        <Button
-            android:id="@+id/option4"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+                <TextView
+                    android:id="@+id/questionText"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:textSize="26sp"
+                    android:textColor="#1A1A2E"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace"
+                    android:lineSpacingMultiplier="1.2"
+                    android:text=" 282&#10;+204" />
 
-        <Button
-            android:id="@+id/backBtn"
-            android:text="Back"
-            android:layout_marginTop="6dp"
+            </androidx.cardview.widget.CardView>
+
+            <!-- Answer buttons row 1 -->
+            <LinearLayout
+                android:id="@+id/btnRow1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:layout_marginBottom="5dp"
+                app:layout_constraintBottom_toTopOf="@id/btnRow2"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/option1"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="—"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:backgroundTint="#2B3A8C"
+                    app:cornerRadius="50dp"
+                    app:rippleColor="#1E2D6B" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/option2"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="—"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:backgroundTint="#2B3A8C"
+                    app:cornerRadius="50dp"
+                    app:rippleColor="#1E2D6B" />
+
+            </LinearLayout>
+
+            <!-- Answer buttons row 2 -->
+            <LinearLayout
+                android:id="@+id/btnRow2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:layout_marginBottom="8dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/option3"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="—"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:backgroundTint="#2B3A8C"
+                    app:cornerRadius="50dp"
+                    app:rippleColor="#1E2D6B" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/option4"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="—"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:backgroundTint="#2B3A8C"
+                    app:cornerRadius="50dp"
+                    app:rippleColor="#1E2D6B" />
+
+            </LinearLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Bottom nav bar — TextViews avoid ImageButton tint issues -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="42dp"
+            android:orientation="vertical"
+            android:background="#F0F0FF">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#C8C8E0" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/navHome"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="⌂"
+                    android:textSize="18sp"
+                    android:textColor="#2B3A8C"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+
+                <TextView
+                    android:id="@+id/navSettings"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="⚙"
+                    android:textSize="17sp"
+                    android:textColor="#2B3A8C"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+
+                <!-- backBtn doubles as the menu/back icon in the nav bar -->
+                <TextView
+                    android:id="@+id/backBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="☰"
+                    android:textSize="17sp"
+                    android:textColor="#2B3A8C"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+
+            </LinearLayout>
+
+        </LinearLayout>
 
     </LinearLayout>
 

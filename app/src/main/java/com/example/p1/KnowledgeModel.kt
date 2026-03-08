@@ -1,6 +1,5 @@
 package com.example.p1
 
-
 data class KnowledgeComponent(
     val id: Int,
     val name: String,
@@ -11,78 +10,134 @@ data class KnowledgeComponent(
     val slipProbability: Double
 )
 
+data class TransitionProb(val low: Double, val high: Double)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Syllabus graph (10 nodes):
+//
+//                  1A                        id=1
+//           /       |       \
+//         2A2      1AC      2A1              id=2, 3, 4
+//          |        \       /
+//          |        2A1C                    id=5
+//          |        /    \
+//         3A      3AC    2A2C               id=7, 8, 6
+//           \     /
+//            3AC                            id=8  ← convergence of 3A + 2A1C
+//             |
+//           3AC2                            id=9
+//             |
+//           3AC3                            id=10
+//
+// Edges (parent → child):
+//   1A   → 2A2, 1AC, 2A1
+//   1AC, 2A1 → 2A1C
+//   2A2  → 3A
+//   3A, 2A1C → 3AC
+//   2A1C → 2A2C
+//   3AC  → 3AC2
+//   3AC2 → 3AC3
+// ─────────────────────────────────────────────────────────────────────────────
+
 object KnowledgeRepository {
 
     val components = mapOf(
 
-        1 to KnowledgeComponent(1,
-            "One digit addition without overflow",
-            emptyList(),
-            0.3, 0.3, 0.2, 0.05),
+        // ── Root ──────────────────────────────────────────────────────────────
+        1 to KnowledgeComponent(
+            id = 1, name = "1A: 1-digit + 1-digit, no carry",
+            prerequisites    = emptyList(),
+            lowTransition    = 0.30, highTransition    = 0.30,
+            guessProbability = 0.20, slipProbability   = 0.050),
 
-        2 to KnowledgeComponent(2,
-            "One digit addition with overflow",
-            listOf(1),
-            0.01, 0.3, 0.2, 0.05),
+        // ── Level 2 (all prereq: 1A) ──────────────────────────────────────────
+        2 to KnowledgeComponent(
+            id = 2, name = "2A2: 2-digit + 2-digit, no carry",
+            prerequisites    = listOf(1),
+            lowTransition    = 0.01, highTransition    = 0.30,
+            guessProbability = 0.15, slipProbability   = 0.050),
 
-        3 to KnowledgeComponent(3,
-            "Two digit addition without carry and no overflow",
-            listOf(1),
-            0.01, 0.3, 0.1, 0.05),
+        3 to KnowledgeComponent(
+            id = 3, name = "1AC: 1-digit + 1-digit, with carry",
+            prerequisites    = listOf(1),
+            lowTransition    = 0.01, highTransition    = 0.30,
+            guessProbability = 0.20, slipProbability   = 0.050),
 
-        4 to KnowledgeComponent(4,
-            "Two digit addition without carry and overflow",
-            listOf(2,3),
-            0.01, 0.3, 0.1, 0.05),
+        4 to KnowledgeComponent(
+            id = 4, name = "2A1: 2-digit + 1-digit, no carry",
+            prerequisites    = listOf(1),
+            lowTransition    = 0.01, highTransition    = 0.30,
+            guessProbability = 0.20, slipProbability   = 0.050),
 
-        5 to KnowledgeComponent(5,
-            "Two digit addition with carry and no overflow",
-            listOf(2),
-            0.01, 0.2, 0.1, 0.075),
+        // ── Level 3 (prereq: 1AC + 2A1) ──────────────────────────────────────
+        5 to KnowledgeComponent(
+            id = 5, name = "2A1C: 2-digit + 1-digit, with carry",
+            prerequisites    = listOf(3, 4),
+            lowTransition    = 0.01, highTransition    = 0.20,
+            guessProbability = 0.10, slipProbability   = 0.075),
 
-        6 to KnowledgeComponent(6,
-            "Two digit addition with carry and overflow",
-            listOf(5),
-            0.01, 0.2, 0.1, 0.075),
+        // ── Level 4a (prereq: 2A1C only) ─────────────────────────────────────
+        6 to KnowledgeComponent(
+            id = 6, name = "2A2C: 2-digit + 2-digit, with carry",
+            prerequisites    = listOf(5),
+            lowTransition    = 0.01, highTransition    = 0.20,
+            guessProbability = 0.10, slipProbability   = 0.075),
 
-        7 to KnowledgeComponent(7,
-            "Three digit addition without carry and no overflow",
-            listOf(3),
-            0.01, 0.3, 0.05, 0.075),
+        // ── Level 4b (prereq: 2A2 only) ──────────────────────────────────────
+        7 to KnowledgeComponent(
+            id = 7, name = "3A: 3-digit + 3-digit, no carry",
+            prerequisites    = listOf(2),
+            lowTransition    = 0.01, highTransition    = 0.15,
+            guessProbability = 0.05, slipProbability   = 0.100),
 
-        8 to KnowledgeComponent(8,
-            "Three digit addition without carry and overflow",
-            listOf(4,7),
-            0.01, 0.1, 0.05, 0.075),
+        // ── Level 5 — convergence (prereq: 3A + 2A1C) ────────────────────────
+        8 to KnowledgeComponent(
+            id = 8, name = "3AC: 3-digit + 3-digit, with carry",
+            prerequisites    = listOf(7, 5),
+            lowTransition    = 0.01, highTransition    = 0.15,
+            guessProbability = 0.05, slipProbability   = 0.100),
 
-        9 to KnowledgeComponent(9,
-            "Three digit addition with carry and no overflow",
-            listOf(5),
-            0.01, 0.15, 0.05, 0.1),
+        // ── Level 6 (prereq: 3AC) ─────────────────────────────────────────────
+        9 to KnowledgeComponent(
+            id = 9, name = "3AC2: 3-digit + 3-digit, 2 carry columns",
+            prerequisites    = listOf(8),
+            lowTransition    = 0.01, highTransition    = 0.10,
+            guessProbability = 0.02, slipProbability   = 0.150),
 
-        10 to KnowledgeComponent(10,
-            "Three digit addition with carry and overflow",
-            listOf(9),
-            0.01, 0.15, 0.05, 0.1),
-
-        11 to KnowledgeComponent(11,
-            "Four digit addition without carry and no overflow",
-            listOf(7),
-            0.01, 0.1, 0.02, 0.1),
-
-        12 to KnowledgeComponent(12,
-            "Four digit addition without carry and overflow",
-            listOf(8,11),
-            0.01, 0.2, 0.02, 0.1),
-
-        13 to KnowledgeComponent(13,
-            "Four digit addition with carry and no overflow",
-            listOf(9),
-            0.01, 0.1, 0.02, 0.15),
-
-        14 to KnowledgeComponent(14,
-            "Four digit addition with carry and overflow",
-            listOf(13),
-            0.01, 0.1, 0.02, 0.15)
+        // ── Level 7 (prereq: 3AC2) ────────────────────────────────────────────
+        10 to KnowledgeComponent(
+            id = 10, name = "3AC3: 3-digit + 3-digit, 3 carry columns",
+            prerequisites    = listOf(9),
+            lowTransition    = 0.01, highTransition    = 0.10,
+            guessProbability = 0.02, slipProbability   = 0.150)
     )
+
+    // ── Helper functions ──────────────────────────────────────────────────────
+
+    fun getGuessProb(kcId: Int): Double =
+        components[kcId]?.guessProbability ?: 0.20
+
+    fun getSlipProb(kcId: Int): Double =
+        components[kcId]?.slipProbability ?: 0.05
+
+    fun getTransition(kcId: Int): TransitionProb {
+        val kc = components[kcId] ?: return TransitionProb(0.01, 0.10)
+        return TransitionProb(kc.lowTransition, kc.highTransition)
+    }
+
+    fun getPrerequisites(kcId: Int): List<Int> =
+        components[kcId]?.prerequisites ?: emptyList()
+
+    /**
+     * Zone of Proximal Development:
+     * KCs whose prerequisites are ALL mastered but which are not yet mastered.
+     */
+    fun getZPD(student: StudentModel): List<Int> =
+        components.values
+            .filter { kc ->
+                !student.isMastered(kc.id) &&
+                        kc.prerequisites.all { student.isMastered(it) }
+            }
+            .map { it.id }
+            .sorted()
 }
