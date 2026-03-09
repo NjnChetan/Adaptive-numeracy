@@ -2,13 +2,14 @@
 <!--
   res/layout/question_panel.xml
 
-  Two states controlled by MainActivity:
-    homeLayout  → visible on launch  (language/operation pickers + Start)
-    quizLayout  → visible during quiz (score badge + question card + buttons + nav)
+  homeLayout:
+    • Top-right: EN | toggle | MR  language switch
+    • Title "Training Panel" (localised)
+    • 2×2 grid of large operation symbol buttons: + − × ÷
+      Selected button highlights in dark navy; others stay light
+    • Start button (enabled only after an operation is chosen)
 
-  All buttons use MaterialButton + app:backgroundTint to avoid the Material
-  theme overriding colours with colorPrimary (which defaults to red/pink in
-  new projects).
+  quizLayout: unchanged — score badge + question card + 2×2 answer buttons + nav bar
 -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -20,65 +21,168 @@
     <!-- ══════════════════════════════════════════════════════════════
          HOME / SETUP SCREEN
     ══════════════════════════════════════════════════════════════════ -->
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/homeLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="12dp"
         android:visibility="visible">
 
+        <!-- ── Language toggle row (top-right) ─────────────────────── -->
+        <!-- "EN" label -->
         <TextView
+            android:id="@+id/labelEn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="Training Panel"
-            android:textSize="16sp"
+            android:text="EN"
+            android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="#1A1A2E" />
+            android:textColor="#2B3A8C"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="2dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/langToggle" />
 
-        <TextView
+        <!-- Toggle switch — SwitchCompat avoids deprecated android.widget.Switch -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/langToggle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Select Language:"
-            android:textSize="12sp"
-            android:textColor="#333355" />
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="8dp"
+            android:checked="false"
+            app:thumbTint="#FFFFFF"
+            app:trackTint="#8A99CC"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/labelMr" />
 
-        <Spinner
-            android:id="@+id/languageSpinner"
-            android:layout_width="180dp"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:entries="@array/languages" />
-
+        <!-- "MR" label -->
         <TextView
+            android:id="@+id/labelMr"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Select Operation:"
-            android:textSize="12sp"
-            android:textColor="#333355" />
+            android:text="MR"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#2B3A8C"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-        <Spinner
-            android:id="@+id/operationSpinner"
-            android:layout_width="180dp"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:entries="@array/operations" />
+        <!-- ── Operation buttons 2×2 grid — anchored below lang toggle ── -->
 
+        <!-- Row 1 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAdd"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="16dp"
+            android:text="+"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:backgroundTint="#8A99CC"
+            app:cornerRadius="500dp"
+            app:layout_constraintTop_toBottomOf="@id/labelEn"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btnSub"
+            app:layout_constraintBottom_toTopOf="@id/btnMul"
+            app:layout_constraintDimensionRatio="1:1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSub"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="16dp"
+            android:text="−"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:backgroundTint="#8A99CC"
+            app:cornerRadius="500dp"
+            app:layout_constraintTop_toBottomOf="@id/labelEn"
+            app:layout_constraintStart_toEndOf="@id/btnAdd"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/btnDiv"
+            app:layout_constraintDimensionRatio="1:1" />
+
+        <!-- Row 2 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnMul"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="12dp"
+            android:text="×"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:backgroundTint="#8A99CC"
+            app:cornerRadius="500dp"
+            app:layout_constraintTop_toBottomOf="@id/btnAdd"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btnDiv"
+            app:layout_constraintBottom_toTopOf="@id/startBtn"
+            app:layout_constraintDimensionRatio="1:1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDiv"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="12dp"
+            android:text="÷"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:backgroundTint="#8A99CC"
+            app:cornerRadius="500dp"
+            app:layout_constraintTop_toBottomOf="@id/btnSub"
+            app:layout_constraintStart_toEndOf="@id/btnMul"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/startBtn"
+            app:layout_constraintDimensionRatio="1:1" />
+
+        <!-- ── Start button ─────────────────────────────────────────── -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/startBtn"
             style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="120dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
             android:text="Start"
             android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            app:backgroundTint="#2B3A8C"
-            app:cornerRadius="50dp" />
+            android:enabled="false"
+            app:backgroundTint="#8A99CC"
+            app:cornerRadius="50dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- ══════════════════════════════════════════════════════════════
          QUIZ SCREEN
@@ -97,8 +201,7 @@
             android:layout_weight="1"
             android:background="#EDEEFF">
 
-            <!-- Score badge: dark navy, top-left
-                 backgroundTint="@null" prevents theme from tinting it red -->
+            <!-- Score badge: navy, top-left -->
             <TextView
                 android:id="@+id/scoreText"
                 android:layout_width="wrap_content"
@@ -248,7 +351,7 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- Bottom nav bar — TextViews avoid ImageButton tint issues -->
+        <!-- Bottom nav bar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="42dp"
@@ -289,7 +392,6 @@
                     android:textColor="#2B3A8C"
                     android:background="?attr/selectableItemBackgroundBorderless" />
 
-                <!-- backBtn doubles as the menu/back icon in the nav bar -->
                 <TextView
                     android:id="@+id/backBtn"
                     android:layout_width="0dp"
