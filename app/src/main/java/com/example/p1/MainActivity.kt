@@ -1,17 +1,21 @@
 package com.example.p1
 
+import android.animation.ValueAnimator
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.cardview.widget.CardView
 import com.google.android.material.button.MaterialButton
 
 class MainActivity : AppCompatActivity() {
 
     private val engines = List(4) { AdaptiveEngine() }
+    private val panelRotations = mutableMapOf<Int, Int>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,59 +28,86 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupPanel(panelId: Int, engine: AdaptiveEngine) {
+
         val panel = findViewById<View>(panelId) ?: return
 
-        val homeLayout = panel.findViewById<View>(R.id.homeLayout) ?: return
-        val quizLayout = panel.findViewById<View>(R.id.quizLayout) ?: return
+        val homeLayout = panel.findViewById<View>(R.id.homeLayout)
+        val quizLayout = panel.findViewById<View>(R.id.quizLayout)
 
-        // ── Home screen views ─────────────────────────────────────────────────
+        val navSettings = panel.findViewById<TextView>(R.id.navSettings)
+        val navHome = panel.findViewById<TextView>(R.id.navHome)
+
         val langToggle = panel.findViewById<SwitchCompat>(R.id.langToggle)
 
-        val btnAdd  = panel.findViewById<MaterialButton>(R.id.btnAdd)  ?: return
-        val btnSub  = panel.findViewById<MaterialButton>(R.id.btnSub)  ?: return
-        val btnMul  = panel.findViewById<MaterialButton>(R.id.btnMul)  ?: return
-        val btnDiv  = panel.findViewById<MaterialButton>(R.id.btnDiv)  ?: return
-        val startBtn = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
+        val btnAdd = panel.findViewById<MaterialButton>(R.id.btnAdd)
+        val btnSub = panel.findViewById<MaterialButton>(R.id.btnSub)
+        val btnMul = panel.findViewById<MaterialButton>(R.id.btnMul)
+        val btnDiv = panel.findViewById<MaterialButton>(R.id.btnDiv)
+        val startBtn = panel.findViewById<MaterialButton>(R.id.startBtn)
 
+        val scoreText = panel.findViewById<TextView>(R.id.scoreText)
+        val questionText = panel.findViewById<TextView>(R.id.questionText)
+        val feedbackText = panel.findViewById<TextView>(R.id.feedbackText)
+
+        val questionCard = panel.findViewById<CardView>(R.id.questionCard)
+
+        val option1 = panel.findViewById<MaterialButton>(R.id.option1)
+        val option2 = panel.findViewById<MaterialButton>(R.id.option2)
+        val option3 = panel.findViewById<MaterialButton>(R.id.option3)
+        val option4 = panel.findViewById<MaterialButton>(R.id.option4)
+
+        val btnRow1 = panel.findViewById<LinearLayout>(R.id.btnRow1)
+        val btnRow2 = panel.findViewById<LinearLayout>(R.id.btnRow2)
+
+        val answerButtons = listOf(option1, option2, option3, option4)
         val opButtons = listOf(btnAdd, btnSub, btnMul, btnDiv)
 
-        // ── Quiz screen views ─────────────────────────────────────────────────
-        val backBtn      = panel.findViewById<View>(R.id.backBtn)           ?: return
-        val scoreText    = panel.findViewById<TextView>(R.id.scoreText)
-        val questionText = panel.findViewById<TextView>(R.id.questionText)  ?: return
+        var selectedOp: String? = null
+        var correct = 0
+        var total = 0
+        var currentLanguage = "en"
 
-        val option1 = panel.findViewById<MaterialButton>(R.id.option1) ?: return
-        val option2 = panel.findViewById<MaterialButton>(R.id.option2) ?: return
-        val option3 = panel.findViewById<MaterialButton>(R.id.option3) ?: return
-        val option4 = panel.findViewById<MaterialButton>(R.id.option4) ?: return
-        val answerButtons = listOf(option1, option2, option3, option4)
+        val colorSelected = Color.parseColor("#2B3A8C")
+        val colorUnselected = Color.parseColor("#8A99CC")
 
-        // ── Score badge: GradientDrawable bypasses Material theme tinting ─────
-        scoreText?.background = GradientDrawable().apply {
-            shape        = GradientDrawable.RECTANGLE
-            cornerRadius = 12f
-            setColor(Color.parseColor("#1A2560"))
+        panelRotations[panelId] = 0
+
+        // PANEL ROTATION
+        navSettings?.setOnClickListener {
+
+            val currentRotation = panelRotations[panelId] ?: 0
+            val newRotation = if (currentRotation == 0) 180 else 0
+
+            panelRotations[panelId] = newRotation
+
+            panel.animate()
+                .rotation(newRotation.toFloat())
+                .setDuration(300)
+                .start()
         }
 
-        // ── State ─────────────────────────────────────────────────────────────
-        var selectedOp: String? = null   // "+", "-", "×", "÷"
-        var correct    = 0
-        var total      = 0
+        // HOME BUTTON
+        navHome?.setOnClickListener {
+            quizLayout.visibility = View.GONE
+            homeLayout.visibility = View.VISIBLE
+        }
 
-        // ── Colour constants ──────────────────────────────────────────────────
-        val colorSelected   = Color.parseColor("#2B3A8C")   // dark navy  — chosen op
-        val colorUnselected = Color.parseColor("#8A99CC")   // soft blue  — unchosen ops
-        val colorStartOn    = Color.parseColor("#2B3A8C")   // dark navy  — start enabled
-        val colorStartOff   = Color.parseColor("#8A99CC")   // soft blue  — start disabled
+        // LANGUAGE TOGGLE (ONLY THIS PANEL)
+        langToggle?.setOnCheckedChangeListener { _, isChecked ->
+            currentLanguage = if (isChecked) "mr" else "en"
+        }
 
-        // ── Operation button selection ────────────────────────────────────────
         fun selectOp(btn: MaterialButton, op: String) {
+
             selectedOp = op
-            opButtons.forEach { it.setBackgroundColor(colorUnselected) }
+
+            opButtons.forEach {
+                it.setBackgroundColor(colorUnselected)
+            }
+
             btn.setBackgroundColor(colorSelected)
-            // Enable Start
+
             startBtn.isEnabled = true
-            startBtn.setBackgroundColor(colorStartOn)
         }
 
         btnAdd.setOnClickListener { selectOp(btnAdd, "+") }
@@ -84,63 +115,144 @@ class MainActivity : AppCompatActivity() {
         btnMul.setOnClickListener { selectOp(btnMul, "×") }
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
-        // langToggle is wired up but translation is not yet implemented
-        langToggle?.isEnabled = false
+        fun updateScore() {
+            scoreText?.text = "$correct/$total"
+        }
 
-        // ── Quiz helpers ──────────────────────────────────────────────────────
-        fun updateScore() { scoreText?.text = "$correct/$total" }
+        fun setAnswersEnabled(enabled: Boolean) {
+            answerButtons.forEach { it.isEnabled = enabled }
+        }
 
-        fun setAnswersEnabled(enabled: Boolean) = answerButtons.forEach { it.isEnabled = enabled }
+        fun blinkBorder(panel: View, color: Int) {
 
-        fun loadQuestion() {
-            val (question, answers) = engine.generateQuestion()
-            questionText.text = formatQuestion(question)
-            setAnswersEnabled(true)
+            val borderView = panel.findViewById<View>(R.id.cardBorder)
+            val drawable = borderView.background as GradientDrawable
 
-            answerButtons.forEachIndexed { i, btn ->
-                btn.text = answers[i].toString()
-                btn.setOnClickListener {
-                    setAnswersEnabled(false)
-                    val feedback = engine.submitAnswer(answers[i])
-                    total++
-                    if (feedback.startsWith("Correct")) correct++
-                    updateScore()
-                    questionText.text = feedback
-                    questionText.postDelayed({ loadQuestion() }, 800)
+            val normalColor = Color.parseColor("#E0E0E0")
+
+            val animator = ValueAnimator.ofArgb(normalColor, color)
+            animator.duration = 120
+            animator.repeatMode = ValueAnimator.REVERSE
+            animator.repeatCount = 5
+
+            animator.addUpdateListener {
+                val c = it.animatedValue as Int
+                drawable.setStroke(8, c)
+            }
+
+            animator.start()
+        }
+
+        fun shakeCard(card: CardView?) {
+
+            card?.animate()?.translationX(40f)?.setDuration(60)?.withEndAction {
+
+                card.animate().translationX(-40f).setDuration(60).withEndAction {
+
+                    card.animate().translationX(20f).setDuration(60).withEndAction {
+
+                        card.animate().translationX(0f).setDuration(60)
+                    }
                 }
             }
         }
 
-        // ── Start button ──────────────────────────────────────────────────────
+        fun loadQuestion() {
+
+            val (question, answers) = engine.generateQuestion()
+
+            if (currentLanguage == "mr") {
+                questionText.text = convertToMarathiDigits(question)
+            } else {
+                questionText.text = question
+            }
+
+            feedbackText?.visibility = View.GONE
+
+            setAnswersEnabled(true)
+
+            answerButtons.forEachIndexed { i, btn ->
+
+                btn.text = answers[i].toString()
+
+                btn.setOnClickListener {
+
+                    setAnswersEnabled(false)
+
+                    val selectedAnswer = answers[i]
+                    val feedback = engine.submitAnswer(selectedAnswer)
+
+                    total++
+
+                    if (feedback.startsWith("Correct")) {
+
+                        correct++
+
+                        feedbackText?.apply {
+                            visibility = View.VISIBLE
+                            text = "✔ Correct!"
+                            setTextColor(Color.parseColor("#2E7D32"))
+                        }
+
+                        blinkBorder(panel, Color.parseColor("#2E7D32"))
+
+                    } else {
+
+                        val correctAnswer = engine.correctAnswer
+
+                        feedbackText?.apply {
+                            visibility = View.VISIBLE
+                            text = "✘ Incorrect — $correctAnswer"
+                            setTextColor(Color.RED)
+                        }
+
+                        blinkBorder(panel, Color.parseColor("#DC143C"))
+                        shakeCard(questionCard)
+                    }
+
+                    updateScore()
+
+                    panel.postDelayed({
+                        loadQuestion()
+                    }, 1200)
+                }
+            }
+        }
+
         startBtn.setOnClickListener {
+
             if (selectedOp == null) return@setOnClickListener
+
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
+
             updateScore()
             loadQuestion()
         }
-
-        // ── Back button (quiz → home) ─────────────────────────────────────────
-        backBtn.setOnClickListener {
-            quizLayout.visibility = View.GONE
-            homeLayout.visibility = View.VISIBLE
-        }
     }
 
-    /**
-     * Formats "282 + 204 = ?" into stacked column-addition style:
-     *   " 282"
-     *   "+204"
-     */
-    private fun formatQuestion(question: String): String {
-        if (question.startsWith("🎉")) return question
-        val op = listOf("+", "-", "×", "÷").firstOrNull { question.contains(" $it ") }
-            ?: return question
-        val parts = question.replace(" = ?", "").split(" $op ")
-        if (parts.size != 2) return question
-        val top   = parts[0].trim()
-        val bot   = parts[1].trim()
-        val width = maxOf(top.length, bot.length + 1)
-        return "${top.padStart(width)}\n${("$op$bot").padStart(width)}"
+    // MARATHI DIGIT CONVERTER
+    private fun convertToMarathiDigits(text: String): String {
+
+        val map = mapOf(
+            '0' to '०',
+            '1' to '१',
+            '2' to '२',
+            '3' to '३',
+            '4' to '४',
+            '5' to '५',
+            '6' to '६',
+            '7' to '७',
+            '8' to '८',
+            '9' to '९'
+        )
+
+        val result = StringBuilder()
+
+        for (c in text) {
+            result.append(map[c] ?: c)
+        }
+
+        return result.toString()
     }
 }

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- res/drawable/bg_score_badge.xml -->
+
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#1A2560" />
-    <corners android:radius="6dp" />
+
+    <solid android:color="#1A2560"/>
+
+    <corners android:radius="6dp"/>
+
 </shape>

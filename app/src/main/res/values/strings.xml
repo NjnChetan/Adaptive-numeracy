@@ -2,6 +2,11 @@
 <resources>
 
     <string name="app_name">Adaptive Numeracy</string>
+
+    <string name="training_panel">Training Panel</string>
+    <string name="select_language">Select Language:</string>
+    <string name="select_operation">Select Operation:</string>
+
     <string name="start">Start</string>
     <string name="back">Back</string>
 
@@ -18,5 +23,7 @@
         <item>Multiplication (×)</item>
         <item>Division (÷)</item>
     </string-array>
+<!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
 
 </resources>
