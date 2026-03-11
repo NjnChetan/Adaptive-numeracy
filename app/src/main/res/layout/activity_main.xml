@@ -5,34 +5,50 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#BBBBCC"
-    android:layout_marginTop="50dp">
+    android:keepScreenOn="true">
 
     <!-- TOP ROW -->
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:clipChildren="true"
+        android:clipToPadding="true">
 
-        <include
-            android:id="@+id/panel1"
-            layout="@layout/question_panel"
+        <!-- Clip wrapper so panel1 rotation stays inside its cell -->
+        <FrameLayout
+            android:id="@+id/clip1"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+            <include
+                android:id="@+id/panel1"
+                layout="@layout/question_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
             android:background="#BBBBCC" />
 
-        <include
-            android:id="@+id/panel2"
-            layout="@layout/question_panel"
+        <FrameLayout
+            android:id="@+id/clip2"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+            <include
+                android:id="@+id/panel2"
+                layout="@layout/question_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
     </LinearLayout>
 
@@ -46,26 +62,42 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:clipChildren="true"
+        android:clipToPadding="true">
 
-        <include
-            android:id="@+id/panel3"
-            layout="@layout/question_panel"
+        <FrameLayout
+            android:id="@+id/clip3"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+            <include
+                android:id="@+id/panel3"
+                layout="@layout/question_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
             android:background="#BBBBCC" />
 
-        <include
-            android:id="@+id/panel4"
-            layout="@layout/question_panel"
+        <FrameLayout
+            android:id="@+id/clip4"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+            <include
+                android:id="@+id/panel4"
+                layout="@layout/question_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
     </LinearLayout>
 
