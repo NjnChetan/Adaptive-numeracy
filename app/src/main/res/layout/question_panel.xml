@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Outer FrameLayout is the cell boundary — clips rotated content to its bounds -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -7,183 +6,228 @@
     android:clipChildren="true"
     android:clipToPadding="true">
 
-    <!--
-      panelContent is what actually rotates.
-      MainActivity rotates this view + applies scaleX/scaleY so it always
-      fills the cell regardless of which 90° step it is on.
-    -->
     <FrameLayout
         android:id="@+id/panelContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#EDEEFF">
 
-        <!-- ══════════════════════════════════════════════════════════════
+        <!-- ══════════════════════════════════════════════════
              HOME SCREEN
-        ══════════════════════════════════════════════════════════════════ -->
-
-        <androidx.constraintlayout.widget.ConstraintLayout
+        ══════════════════════════════════════════════════════ -->
+        <LinearLayout
             android:id="@+id/homeLayout"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:orientation="vertical">
 
-            <!-- ── Language toggle: EN ── switch ── MR (top-right) ───────── -->
+            <!-- Lang toggle row — aligned to end (top-right) -->
 
-            <TextView
-                android:id="@+id/labelEn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="EN"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:textColor="#2B3A8C"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="2dp"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/langToggle" />
+            <!-- Middle: op grid + start button, fills remaining space -->
+            <LinearLayout
+                android:id="@+id/langBar"
+                android:layout_width="match_parent"
+                android:layout_height="95dp"
+                android:gravity="center_vertical|end"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp">
 
-            <!--
-              FIX 1: removed android:text="@string/start" — caused the toggle to
-                     display "Start" text (or asterisks if the string was missing).
-              FIX 2: added app:showText="false" — suppresses the * / · indicators
-                     that SwitchCompat draws inside the thumb on some API levels.
-            -->
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/langToggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="2dp"
-                android:checked="false"
-                app:showText="false"
-                app:thumbTint="#FFFFFF"
-                app:trackTint="#8A99CC"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/labelMr" />
+                <TextView
+                    android:id="@+id/labelEn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="2dp"
+                    android:text="EN"
+                    android:textColor="#2B3A8C"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/labelMr"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="MR"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:textColor="#2B3A8C"
-                android:layout_marginTop="10dp"
-                android:layout_marginEnd="10dp"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintEnd_toEndOf="parent" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/langToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    app:showText="false"
+                    app:thumbTint="#FFFFFF"
+                    app:trackTint="#8A99CC" />
 
-            <!-- ── Operation buttons 2×2 ────────────────────────────────── -->
+                <TextView
+                    android:id="@+id/labelMr"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:text="MA"
+                    android:textColor="#2B3A8C"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
 
-            <!--
-              FIX 3: buttons were half-visible because btnMul/btnDiv had
-                     constraintTop_toBottomOf="@id/btnAdd/@id/btnSub" which
-                     correctly chains rows, BUT btnAdd/btnSub had no bottom
-                     constraint — so ConstraintLayout couldn't resolve their
-                     height and clipped them.
-              Fix:  chain all 4 buttons vertically with proper top+bottom
-                    constraints forming a packed chain between langToggle and startBtn.
-            -->
+            </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAdd"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:id="@+id/homeMiddle"
+                android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:text="+"
-                android:textSize="28sp"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_margin="12dp"
-                app:backgroundTint="#8A99CC"
-                app:cornerRadius="500dp"
-                app:layout_constraintDimensionRatio="1:1"
-                app:layout_constraintTop_toBottomOf="@id/langToggle"
-                app:layout_constraintBottom_toTopOf="@id/btnMul"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/btnSub" />
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSub"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:text="−"
-                android:textSize="28sp"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_margin="12dp"
-                app:backgroundTint="#8A99CC"
-                app:cornerRadius="500dp"
-                app:layout_constraintDimensionRatio="1:1"
-                app:layout_constraintTop_toBottomOf="@id/langToggle"
-                app:layout_constraintBottom_toTopOf="@id/btnDiv"
-                app:layout_constraintStart_toEndOf="@id/btnAdd"
-                app:layout_constraintEnd_toEndOf="parent" />
+                <!-- 2×2 op grid fills available space -->
+                <LinearLayout
+                    android:id="@+id/opContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="4dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnMul"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:text="×"
-                android:textSize="28sp"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_margin="12dp"
-                app:backgroundTint="#8A99CC"
-                app:cornerRadius="500dp"
-                app:layout_constraintDimensionRatio="1:1"
-                app:layout_constraintTop_toBottomOf="@id/btnAdd"
-                app:layout_constraintBottom_toTopOf="@id/startBtn"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/btnDiv" />
+                    <LinearLayout
+                        android:id="@+id/opRow1"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnDiv"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:text="÷"
-                android:textSize="28sp"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_margin="12dp"
-                app:backgroundTint="#8A99CC"
-                app:cornerRadius="500dp"
-                app:layout_constraintDimensionRatio="1:1"
-                app:layout_constraintTop_toBottomOf="@id/btnSub"
-                app:layout_constraintBottom_toTopOf="@id/startBtn"
-                app:layout_constraintStart_toEndOf="@id/btnMul"
-                app:layout_constraintEnd_toEndOf="parent" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnAdd"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:layout_margin="4dp"
+                            android:text="+"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            app:backgroundTint="#8A99CC"
+                            app:cornerRadius="16dp" />
 
-            <!-- ── Start button ─────────────────────────────────────────── -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSub"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:layout_margin="4dp"
+                            android:text="−"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            app:backgroundTint="#8A99CC"
+                            app:cornerRadius="16dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/startBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Start"
-                android:textColor="#FFFFFF"
-                android:enabled="false"
-                app:backgroundTint="#8A99CC"
-                app:cornerRadius="50dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:layout_marginBottom="20dp" />
+                    </LinearLayout>
 
-        </androidx.constraintlayout.widget.ConstraintLayout>
+                    <LinearLayout
+                        android:id="@+id/opRow2"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal">
 
-        <!-- ══════════════════════════════════════════════════════════════
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnMul"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_margin="4dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:text="×"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold"
+                            app:backgroundTint="#8A99CC"
+                            app:cornerRadius="16dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnDiv"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_margin="4dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:text="÷"
+                            android:textColor="#FFFFFF"
+                            android:textStyle="bold"
+                            app:backgroundTint="#8A99CC"
+                            app:cornerRadius="16dp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Start button — centred, pushed down with top margin -->
+                <LinearLayout
+                    android:id="@+id/startBtnWrapper"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/startBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Start"
+                        android:textColor="#FFFFFF"
+                        android:enabled="false"
+                        app:backgroundTint="#8A99CC"
+                        app:cornerRadius="50dp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Fixed nav bar -->
+            <LinearLayout
+                android:id="@+id/homeNavBar"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:orientation="vertical"
+                android:background="#F0F0FF">
+
+                <View android:layout_width="match_parent" android:layout_height="1dp"
+                    android:background="#C8C8E0" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/homeNavHome"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="⌂"
+                        android:textSize="16sp"
+                        android:textColor="#2B3A8C"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                    <TextView
+                        android:id="@+id/homeNavRotate"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="⟳"
+                        android:textSize="16sp"
+                        android:textColor="#2B3A8C"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- ══════════════════════════════════════════════════
              QUIZ SCREEN
-        ══════════════════════════════════════════════════════════════════ -->
-
+        ══════════════════════════════════════════════════════ -->
         <LinearLayout
             android:id="@+id/quizLayout"
             android:layout_width="match_parent"
@@ -191,14 +235,12 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-            <!-- Quiz content -->
-
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1">
-
-                <!-- Score badge -->
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:padding="4dp">
 
                 <TextView
                     android:id="@+id/scoreText"
@@ -206,28 +248,22 @@
                     android:layout_height="wrap_content"
                     android:text="0/0"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:textStyle="bold"
-                    android:padding="6dp"
-                    android:layout_margin="8dp"
-                    android:background="@drawable/bg_score_badge"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintStart_toStartOf="parent" />
-
-                <!-- Question card -->
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:background="@drawable/bg_score_badge" />
 
                 <androidx.cardview.widget.CardView
                     android:id="@+id/questionCard"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="0dp"
-                    android:layout_margin="10dp"
-                    app:cardCornerRadius="14dp"
+                    android:layout_weight="3"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="4dp"
+                    app:cardCornerRadius="12dp"
                     app:cardElevation="2dp"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:layout_constraintTop_toBottomOf="@id/scoreText"
-                    app:layout_constraintBottom_toTopOf="@id/btnRow1"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent">
+                    app:cardBackgroundColor="#FFFFFF">
 
                     <LinearLayout
                         android:id="@+id/cardBorder"
@@ -235,14 +271,13 @@
                         android:layout_height="match_parent"
                         android:background="@drawable/question_card_border"
                         android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="20dp">
+                        android:orientation="vertical">
 
                         <TextView
                             android:id="@+id/questionText"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textSize="26sp"
+                            android:textSize="22sp"
                             android:textStyle="bold"
                             android:fontFamily="monospace"
                             android:textColor="#1A1A2E" />
@@ -251,33 +286,28 @@
                             android:id="@+id/feedbackText"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:textSize="12sp"
+                            android:textSize="10sp"
                             android:textStyle="bold"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="4dp"
                             android:visibility="gone" />
 
                     </LinearLayout>
-
                 </androidx.cardview.widget.CardView>
-
-                <!-- Answer buttons row 1 -->
 
                 <LinearLayout
                     android:id="@+id/btnRow1"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
                     android:orientation="horizontal"
-                    android:layout_margin="10dp"
-                    app:layout_constraintBottom_toTopOf="@id/btnRow2"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent">
+                    android:layout_marginBottom="2dp">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/option1"
                         android:layout_width="0dp"
-                        android:layout_height="42dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="2dp"
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         android:insetTop="0dp"
@@ -288,9 +318,9 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/option2"
                         android:layout_width="0dp"
-                        android:layout_height="42dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:layout_marginStart="4dp"
+                        android:layout_marginStart="2dp"
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         android:insetTop="0dp"
@@ -300,24 +330,19 @@
 
                 </LinearLayout>
 
-                <!-- Answer buttons row 2 -->
-
                 <LinearLayout
                     android:id="@+id/btnRow2"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_margin="10dp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent">
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/option3"
                         android:layout_width="0dp"
-                        android:layout_height="42dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="2dp"
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         android:insetTop="0dp"
@@ -328,9 +353,9 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/option4"
                         android:layout_width="0dp"
-                        android:layout_height="42dp"
+                        android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:layout_marginStart="4dp"
+                        android:layout_marginStart="2dp"
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         android:insetTop="0dp"
@@ -340,19 +365,17 @@
 
                 </LinearLayout>
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
+            </LinearLayout>
 
-            <!-- Bottom nav bar -->
-
+            <!-- Fixed nav bar -->
             <LinearLayout
+                android:id="@+id/quizNavBar"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
+                android:layout_height="36dp"
                 android:orientation="vertical"
                 android:background="#F0F0FF">
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
+                <View android:layout_width="match_parent" android:layout_height="1dp"
                     android:background="#C8C8E0" />
 
                 <LinearLayout
@@ -368,7 +391,7 @@
                         android:layout_weight="1"
                         android:gravity="center"
                         android:text="⌂"
-                        android:textSize="20sp"
+                        android:textSize="16sp"
                         android:textColor="#2B3A8C"
                         android:background="?attr/selectableItemBackgroundBorderless" />
 
@@ -379,16 +402,14 @@
                         android:layout_weight="1"
                         android:gravity="center"
                         android:text="⟳"
-                        android:textSize="20sp"
+                        android:textSize="16sp"
                         android:textColor="#2B3A8C"
                         android:background="?attr/selectableItemBackgroundBorderless" />
 
                 </LinearLayout>
-
             </LinearLayout>
 
         </LinearLayout>
 
-    </FrameLayout><!-- end panelContent -->
-
-</FrameLayout><!-- end outer clip container -->
+    </FrameLayout>
+</FrameLayout>

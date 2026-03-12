@@ -51,7 +51,7 @@ class AdaptiveEngine {
         for (kcId in zpd) addArmIfNeeded(kcId)
 
         if (bandit.activeArms().isEmpty()) {
-            return Pair("🎉 All concepts mastered!", listOf(0, 0, 0, 0))
+            return Pair("🎉 All concepts mastered!", listOf(0, 0, 0, 0)) // get rid after the final presentaion
         }
 
         currentKC = chooseKC(zpd)
