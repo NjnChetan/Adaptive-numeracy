@@ -2,15 +2,20 @@ package com.example.p1
 
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
+import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 
 class MainActivity : AppCompatActivity() {
@@ -19,8 +24,36 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // No requestedOrientation — app rotates freely
+
+        // Draw edge-to-edge so app content goes behind status bar / camera cutout
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Allow drawing into the camera cutout area
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+
         setContentView(R.layout.activity_main)
+
+        // Dynamically set the top white bar height to exactly the status bar
+        // + camera cutout inset so content starts cleanly below the notch
+        val topBar = findViewById<View>(R.id.topWhiteBar)
+        val bottomBar = findViewById<View>(R.id.bottomWhiteBar)
+        ViewCompat.setOnApplyWindowInsetsListener(topBar) { v, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            v.layoutParams.height = top.takeIf { it > 0 }
+                ?: (10 * resources.displayMetrics.density).toInt()
+            v.requestLayout()
+            insets
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(bottomBar) { v, insets ->
+            val bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            v.layoutParams.height = bottom.takeIf { it > 0 }
+                ?: (10 * resources.displayMetrics.density).toInt()
+            v.requestLayout()
+            insets
+        }
 
         setupPanel(R.id.panel1, R.id.clip1, engines[0])
         setupPanel(R.id.panel2, R.id.clip2, engines[1])
@@ -35,16 +68,18 @@ class MainActivity : AppCompatActivity() {
         val homeLayout   = panel.findViewById<View>(R.id.homeLayout)   ?: return
         val quizLayout   = panel.findViewById<View>(R.id.quizLayout)   ?: return
 
-        val homeMiddle = panel.findViewById<LinearLayout>(R.id.homeMiddle)
-        val opContainer = panel.findViewById<LinearLayout>(R.id.opContainer)
+        // Home layout helpers
+        val homeMiddle      = panel.findViewById<LinearLayout>(R.id.homeMiddle)
+        val opContainer     = panel.findViewById<LinearLayout>(R.id.opContainer)
         val startBtnWrapper = panel.findViewById<LinearLayout>(R.id.startBtnWrapper)
 
-        val langToggle      = panel.findViewById<SwitchCompat>(R.id.langToggle)
-        val btnAdd          = panel.findViewById<MaterialButton>(R.id.btnAdd)   ?: return
-        val btnSub          = panel.findViewById<MaterialButton>(R.id.btnSub)   ?: return
-        val btnMul          = panel.findViewById<MaterialButton>(R.id.btnMul)   ?: return
-        val btnDiv          = panel.findViewById<MaterialButton>(R.id.btnDiv)   ?: return
-        val startBtn        = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
+        val langToggle = panel.findViewById<SwitchCompat>(R.id.langToggle)
+
+        val btnAdd   = panel.findViewById<MaterialButton>(R.id.btnAdd)   ?: return
+        val btnSub   = panel.findViewById<MaterialButton>(R.id.btnSub)   ?: return
+        val btnMul   = panel.findViewById<MaterialButton>(R.id.btnMul)   ?: return
+        val btnDiv   = panel.findViewById<MaterialButton>(R.id.btnDiv)   ?: return
+        val startBtn = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
 
         val scoreText    = panel.findViewById<TextView>(R.id.scoreText)
         val questionText = panel.findViewById<TextView>(R.id.questionText)   ?: return
@@ -54,6 +89,11 @@ class MainActivity : AppCompatActivity() {
         val option3      = panel.findViewById<MaterialButton>(R.id.option3)  ?: return
         val option4      = panel.findViewById<MaterialButton>(R.id.option4)  ?: return
         val cardBorder   = panel.findViewById<View>(R.id.cardBorder)
+
+        val homeNavHome   = panel.findViewById<View>(R.id.homeNavHome)
+        val homeNavRotate = panel.findViewById<View>(R.id.homeNavRotate)
+        val navHome       = panel.findViewById<View>(R.id.navHome)
+        val navRotate     = panel.findViewById<View>(R.id.navRotate)
 
         val opButtons     = listOf(btnAdd, btnSub, btnMul, btnDiv)
         val answerButtons = listOf(option1, option2, option3, option4)
@@ -77,6 +117,16 @@ class MainActivity : AppCompatActivity() {
         var correct = 0; var total = 0
         var isMarathi = false
 
+        // ── Language ──────────────────────────────────────────────────────────
+        langToggle?.setOnCheckedChangeListener { _, checked -> isMarathi = checked }
+
+        fun toMarathi(s: String): String {
+            val m = charArrayOf('०','१','२','३','४','५','६','७','८','९')
+            return s.map { if (it.isDigit()) m[it - '0'] else it }.joinToString("")
+        }
+        fun loc(s: String) = if (isMarathi) toMarathi(s) else s
+
+        // ── Operation selection ───────────────────────────────────────────────
         fun selectOp(btn: MaterialButton, op: String) {
             selectedOp = op
             opButtons.forEach { it.setBackgroundColor(colorOff) }
@@ -90,14 +140,7 @@ class MainActivity : AppCompatActivity() {
         btnMul.setOnClickListener { selectOp(btnMul, "×") }
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
-        langToggle?.setOnCheckedChangeListener { _, checked -> isMarathi = checked }
-
-        fun toMarathi(s: String): String {
-            val m = charArrayOf('०','१','२','३','४','५','६','७','८','९')
-            return s.map { if (it.isDigit()) m[it - '0'] else it }.joinToString("")
-        }
-        fun loc(s: String) = if (isMarathi) toMarathi(s) else s
-
+        // ── Quiz ──────────────────────────────────────────────────────────────
         fun loadQuestion() {
             feedbackText?.visibility = View.GONE
             cardBorder?.background = normalBorder
@@ -133,62 +176,32 @@ class MainActivity : AppCompatActivity() {
             loadQuestion()
         }
 
-        panel.findViewById<View>(R.id.navHome)?.setOnClickListener {
+        homeNavHome?.setOnClickListener { /* already on home screen */ }
+        navHome?.setOnClickListener {
             quizLayout.visibility = View.GONE
             homeLayout.visibility = View.VISIBLE
         }
 
-        // ── Op button layout: 2×2 vs 1×4 ────────────────────────────────────
-        // In a short/wide cell (landscape phone) the 2×2 grid rows are too
-        // small and buttons collapse to dots.
-        // Fix: when cell width > height, flatten to a single horizontal row.
-        // The opContainer stays vertical with weight, but we move all 4 buttons
-        // into opRow1 and hide opRow2 (which becomes empty).
-
-        // ── Home layout: tall cell → vertical stack, wide cell → horizontal split ─
-        // visW/visH are the visible dimensions of the cell (after rotation applied)
+        // ── Home layout: always vertical (portrait-style) regardless of orientation
         fun applyHomeLayout(visW: Int, visH: Int) {
-            val m = homeMiddle ?: return
-            val oc = opContainer ?: return
+            val m  = homeMiddle      ?: return
+            val oc = opContainer     ?: return
             val sw = startBtnWrapper ?: return
-            val isWide = visW > visH * 1.2f   // wide = landscape phone cell
 
-            if (isWide) {
-                // Horizontal: opContainer (2×2) on left | startBtnWrapper on right
-                m.orientation = LinearLayout.HORIZONTAL
-                (oc.layoutParams as LinearLayout.LayoutParams).apply {
-                    width = 0
-                    height = ViewGroup.LayoutParams.MATCH_PARENT
-                    weight = 1f
-                }
-                (sw.layoutParams as LinearLayout.LayoutParams).apply {
-                    width = 0
-                    height = ViewGroup.LayoutParams.MATCH_PARENT
-                    weight = 1f
-                }
-                sw.gravity = android.view.Gravity.CENTER
-            } else {
-                // Vertical: opContainer fills, startBtnWrapper below
-                m.orientation = LinearLayout.VERTICAL
-                (oc.layoutParams as LinearLayout.LayoutParams).apply {
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                    height = 0
-                    weight = 1f
-                }
-                (sw.layoutParams as LinearLayout.LayoutParams).apply {
-                    width = ViewGroup.LayoutParams.MATCH_PARENT
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    weight = 0f
-                }
-                sw.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            m.orientation = LinearLayout.VERTICAL
+            (oc.layoutParams as LinearLayout.LayoutParams).apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT; height = 0; weight = 1f
             }
+            (sw.layoutParams as LinearLayout.LayoutParams).apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                weight = 0f
+            }
+            sw.gravity = android.view.Gravity.CENTER_HORIZONTAL
             m.requestLayout()
         }
 
-        // Always 2×2 grid regardless of orientation
-
         // ── Text scaling ──────────────────────────────────────────────────────
-        // All sizes derived from cell height so they stay proportional on any screen.
         fun pxToSp(px: Float): Float = px / resources.displayMetrics.scaledDensity
 
         fun applyScaledText(cellH: Int) {
@@ -212,36 +225,46 @@ class MainActivity : AppCompatActivity() {
             panelContent.layoutParams = lp
             panelContent.translationX = if (portrait) (w - h) / 2f else 0f
             panelContent.translationY = if (portrait) (h - w) / 2f else 0f
-            applyScaledText(if (portrait) w else h)
-            applyHomeLayout(if (portrait) h else w, if (portrait) w else h)
+            val visW = if (portrait) h else w
+            val visH = if (portrait) w else h
+            applyScaledText(visH)
+            applyHomeLayout(visW, visH)
             panelContent.animate()
                 .rotation(step * 90f)
                 .scaleX(1f).scaleY(1f)
                 .setDuration(350).start()
         }
 
-        // Re-apply on device rotation
         clipView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             private var lastW = 0; private var lastH = 0
             override fun onGlobalLayout() {
                 val w = clipView.width; val h = clipView.height
                 if ((w != lastW || h != lastH) && w != 0 && h != 0) {
                     lastW = w; lastH = h
+                    // If cell is now portrait but step is sideways (1 or 3), snap to 0
+                    if (h > w && (rotationStep == 1 || rotationStep == 3)) rotationStep = 0
                     applyRotation(w, h, rotationStep)
                 }
             }
         })
 
         val doRotate = {
-            rotationStep = (rotationStep + 1) % 4
+            val w = clipView.width; val h = clipView.height
+            val cellIsPortrait = h > w   // physical cell shape on screen
+            if (cellIsPortrait) {
+                // Portrait cell: only 0° and 180° (steps 0 and 2)
+                rotationStep = if (rotationStep == 0) 2 else 0
+            } else {
+                // Landscape cell: full 4-direction cycle
+                rotationStep = (rotationStep + 1) % 4
+            }
             clipView.post {
-                val w = clipView.width; val h = clipView.height
                 if (w != 0 && h != 0) applyRotation(w, h, rotationStep)
             }
         }
 
-        panel.findViewById<View>(R.id.navRotate)?.setOnClickListener { doRotate() }
-        panel.findViewById<View>(R.id.homeNavRotate)?.setOnClickListener { doRotate() }
+        homeNavRotate?.setOnClickListener { doRotate() }
+        navRotate?.setOnClickListener { doRotate() }
     }
 
     private fun formatQuestion(question: String): String {

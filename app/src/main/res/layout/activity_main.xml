@@ -5,9 +5,17 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#BBBBCC"
-    android:keepScreenOn="true">
+    android:keepScreenOn="true"
+    android:fitsSystemWindows="true">
 
-    <!-- TOP ROW -->
+    <!-- WHITE BAR — top of screen, respects status bar / camera cutout -->
+    <View
+        android:id="@+id/topWhiteBar"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:background="#FFFFFF" />
+
+    <!-- TOP ROW: panels 1 & 2 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -16,7 +24,6 @@
         android:clipChildren="true"
         android:clipToPadding="true">
 
-        <!-- Clip wrapper so panel1 rotation stays inside its cell -->
         <FrameLayout
             android:id="@+id/clip1"
             android:layout_width="0dp"
@@ -52,12 +59,13 @@
 
     </LinearLayout>
 
+    <!-- Divider between rows -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#BBBBCC" />
 
-    <!-- BOTTOM ROW -->
+    <!-- BOTTOM ROW: panels 3 & 4 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -100,5 +108,12 @@
         </FrameLayout>
 
     </LinearLayout>
+
+    <!-- WHITE BAR — bottom of screen, below panels 3 & 4 -->
+    <View
+        android:id="@+id/bottomWhiteBar"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:background="#FFFFFF" />
 
 </LinearLayout>
