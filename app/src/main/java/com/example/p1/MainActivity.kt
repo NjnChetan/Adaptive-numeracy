@@ -171,6 +171,8 @@ class MainActivity : AppCompatActivity() {
 
         startBtn.setOnClickListener {
             if (selectedOp == null) return@setOnClickListener
+            engine.activeOps = setOf(selectedOp!!)
+            engine.initZPD()
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
             loadQuestion()
@@ -269,11 +271,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatQuestion(question: String): String {
         if (question.startsWith("🎉")) return question
-        val op = listOf("+", "-", "×", "÷").firstOrNull { question.contains(" $it ") } ?: return question
+        val op = listOf("+", "-", "−", "×", "÷").firstOrNull { question.contains(" $it ") } ?: return question
         val parts = question.replace(" = ?", "").split(" $op ")
         if (parts.size != 2) return question
         val top = parts[0].trim(); val bot = parts[1].trim()
+        val displayOp = op   // keep the original symbol (− for subtraction)
         val width = maxOf(top.length, bot.length + 1)
-        return "${top.padStart(width)}\n${("$op$bot").padStart(width)}"
+        return "${top.padStart(width)}\n${("$displayOp$bot").padStart(width)}"
     }
 }

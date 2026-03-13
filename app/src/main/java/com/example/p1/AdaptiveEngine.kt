@@ -12,11 +12,13 @@ class AdaptiveEngine {
     private val bandit         = KLUCBBandit()
     private val cusumDetectors = mutableMapOf<Int, CUSUMDetector>()
     private var ts             = 0
-    private var currentKC      = 1
+    private var currentKC      = -1
+
+    // Active operation set — set by MainActivity before generateQuestion()
+    // Defaults to addition only; updated when user selects operations.
+    var activeOps: Set<String> = setOf("+")
 
     // ── Focus mode ────────────────────────────────────────────────────────────
-    // focusKC releases after MIN_FOCUS questions so the bandit can re-evaluate
-    // all ZPD arms via UCB and bootstrap any newly unlocked KCs.
     private var focusKC:            Int? = null
     private var focusQuestionCount: Int  = 0
     private var consecutiveWrong:   Int  = 0
@@ -26,10 +28,9 @@ class AdaptiveEngine {
     var correctAnswer: Int = 0
         private set
 
-    init { initZPD() }
-
-    private fun initZPD() {
-        for (kcId in KnowledgeRepository.getZPD(student)) addArmIfNeeded(kcId)
+    // ── ZPD / arm initialisation ──────────────────────────────────────────────
+    fun initZPD() {
+        for (kcId in KnowledgeRepository.getZPD(student, activeOps)) addArmIfNeeded(kcId)
     }
 
     private fun addArmIfNeeded(kcId: Int) {
@@ -47,20 +48,31 @@ class AdaptiveEngine {
     // generateQuestion
     // ─────────────────────────────────────────────────────────────────────────
     fun generateQuestion(): Pair<String, List<Int>> {
-        val zpd = KnowledgeRepository.getZPD(student)
+        val zpd = KnowledgeRepository.getZPD(student, activeOps)
         for (kcId in zpd) addArmIfNeeded(kcId)
 
+        // Prune arms that are no longer in the ZPD for the active ops
+        // (e.g. user switched from + to −, or a new op was deactivated)
+        val validIds = zpd.toSet()
+        bandit.activeArms().minus(validIds).forEach { staleId ->
+            bandit.removeArm(staleId)
+            cusumDetectors.remove(staleId)
+        }
+
         if (bandit.activeArms().isEmpty()) {
-            return Pair("🎉 All concepts mastered!", listOf(0, 0, 0, 0)) // get rid after the final presentaion
+            return Pair("🎉 All concepts mastered!", listOf(0, 0, 0, 0))
         }
 
         currentKC = chooseKC(zpd)
 
+        val isSub = KnowledgeRepository.isSubtraction(currentKC)
         val (num1, num2) = generateNumbersForKC(currentKC)
-        correctAnswer    = num1 + num2
+        correctAnswer = if (isSub) num1 - num2 else num1 + num2
 
-        val question = "$num1 + $num2 = ?"
+        val op       = if (isSub) "−" else "+"
+        val question = "$num1 $op $num2 = ?"
 
+        // Distractors — stay non-negative for subtraction
         val options = mutableSetOf(correctAnswer)
         var offset  = 1
         var attempts = 0
@@ -116,7 +128,7 @@ class AdaptiveEngine {
         focusQuestionCount = 0
         consecutiveWrong   = 0
         println("✅ MASTERED KC $kcId: ${KnowledgeRepository.components[kcId]?.name}")
-        for (newKc in KnowledgeRepository.getZPD(student)) addArmIfNeeded(newKc)
+        for (newKc in KnowledgeRepository.getZPD(student, activeOps)) addArmIfNeeded(newKc)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -164,18 +176,29 @@ class AdaptiveEngine {
             .map { it.name }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Problem generation — matches the 10-node syllabus exactly
+    // Problem generation
     //
-    //  1  = 1A   : 1d + 1d, no carry          (sum < 10)
-    //  2  = 2A2  : 2d + 2d, no carry
-    //  3  = 1AC  : 1d + 1d, with carry         (sum >= 10)
-    //  4  = 2A1  : 2d + 1d, no carry
-    //  5  = 2A1C : 2d + 1d, with carry
-    //  6  = 2A2C : 2d + 2d, with carry
-    //  7  = 3A   : 3d + 3d, no carry
-    //  8  = 3AC  : 3d + 3d, exactly 1 carry column
-    //  9  = 3AC2 : 3d + 3d, exactly 2 carry columns
-    //  10 = 3AC3 : 3d + 3d, all 3 carry columns
+    // ADDITION (ids 1–10):
+    //  1  = 1A    : 1d + 1d, no carry
+    //  2  = 2A2   : 2d + 2d, no carry
+    //  3  = 1AC   : 1d + 1d, with carry
+    //  4  = 2A1   : 2d + 1d, no carry
+    //  5  = 2A1C  : 2d + 1d, with carry
+    //  6  = 2A2C  : 2d + 2d, with carry
+    //  7  = 3A    : 3d + 3d, no carry
+    //  8  = 3AC   : 3d + 3d, exactly 1 carry
+    //  9  = 3AC2  : 3d + 3d, exactly 2 carries
+    //  10 = 3AC3  : 3d + 3d, 3 carries
+    //
+    // SUBTRACTION (ids 11–18):
+    //  11 = 1S    : 1d − 1d, no borrow  (a > b, result > 0)
+    //  12 = 2S1   : 2d − 1d, no borrow
+    //  13 = 2S1B  : 2d − 1d, with borrow
+    //  14 = 2S2   : 2d − 2d, no borrow
+    //  15 = 2S2B  : 2d − 2d, with borrow
+    //  16 = 3S    : 3d − 3d, no borrow
+    //  17 = 3SB   : 3d − 3d, exactly 1 borrow column
+    //  18 = 3SB2  : 3d − 3d, exactly 2 borrow columns
     // ─────────────────────────────────────────────────────────────────────────
     private fun generateNumbersForKC(kcId: Int): Pair<Int, Int> {
 
@@ -185,6 +208,7 @@ class AdaptiveEngine {
             return (lo..hi).random()
         }
 
+        // ── Addition helpers ──────────────────────────────────────────────────
         fun hasCarry(a: Int, b: Int): Boolean {
             var x = a; var y = b
             while (x > 0 || y > 0) {
@@ -203,9 +227,31 @@ class AdaptiveEngine {
             return c
         }
 
+        // ── Subtraction helpers ───────────────────────────────────────────────
+        // A "borrow" occurs in column i when the top digit < the bottom digit.
+        fun hasBorrow(a: Int, b: Int): Boolean {
+            var x = a; var y = b
+            while (x > 0 || y > 0) {
+                if ((x % 10) < (y % 10)) return true
+                x /= 10; y /= 10
+            }
+            return false
+        }
+
+        fun borrowCount(a: Int, b: Int): Int {
+            var x = a; var y = b; var c = 0
+            while (x > 0 || y > 0) {
+                if ((x % 10) < (y % 10)) c++
+                x /= 10; y /= 10
+            }
+            return c
+        }
+
         return when (kcId) {
 
-            // 1A — 1-digit + 1-digit, no carry (sum < 10)
+            // ── ADDITION ─────────────────────────────────────────────────────
+
+            // 1A — 1-digit + 1-digit, no carry
             1 -> {
                 var a: Int; var b: Int
                 do { a = (1..9).random(); b = (1..9).random() } while (a + b >= 10)
@@ -219,7 +265,7 @@ class AdaptiveEngine {
                 Pair(a, b)
             }
 
-            // 1AC — 1-digit + 1-digit, with carry (sum >= 10)
+            // 1AC — 1-digit + 1-digit, with carry
             3 -> {
                 var a: Int; var b: Int
                 do { a = (1..9).random(); b = (1..9).random() } while (a + b < 10)
@@ -275,16 +321,68 @@ class AdaptiveEngine {
                 Pair(a, b)
             }
 
+            // ── SUBTRACTION ──────────────────────────────────────────────────
+
+            // 1S — 1-digit − 1-digit, no borrow (a > b, result ≥ 1)
+            11 -> {
+                var a: Int; var b: Int
+                do { a = (2..9).random(); b = (1..9).random() } while (a <= b)
+                Pair(a, b)
+            }
+
+            // 2S1 — 2-digit − 1-digit, no borrow
+            12 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(2); b = (1..9).random() } while (hasBorrow(a, b) || a - b <= 0)
+                Pair(a, b)
+            }
+
+            // 2S1B — 2-digit − 1-digit, with borrow
+            13 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(2); b = (1..9).random() } while (!hasBorrow(a, b) || a - b <= 0)
+                Pair(a, b)
+            }
+
+            // 2S2 — 2-digit − 2-digit, no borrow (a > b)
+            14 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(2); b = nDigit(2) } while (hasBorrow(a, b) || a <= b)
+                Pair(a, b)
+            }
+
+            // 2S2B — 2-digit − 2-digit, with borrow (a > b)
+            15 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(2); b = nDigit(2) } while (!hasBorrow(a, b) || a <= b)
+                Pair(a, b)
+            }
+
+            // 3S — 3-digit − 3-digit, no borrow (a > b)
+            16 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(3); b = nDigit(3) } while (hasBorrow(a, b) || a <= b)
+                Pair(a, b)
+            }
+
+            // 3SB — 3-digit − 3-digit, exactly 1 borrow column (a > b)
+            17 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) != 1 || a <= b)
+                Pair(a, b)
+            }
+
+            // 3SB2 — 3-digit − 3-digit, exactly 2 borrow columns (a > b)
+            18 -> {
+                var a: Int; var b: Int
+                do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) != 2 || a <= b)
+                Pair(a, b)
+            }
+
             else -> Pair(1, 1)
         }
     }
 
-    private fun hasCarry(a: Int, b: Int): Boolean {
-        var x = a; var y = b
-        while (x > 0 || y > 0) {
-            if ((x % 10) + (y % 10) >= 10) return true
-            x /= 10; y /= 10
-        }
-        return false
-    }
+    // Keep the class-level hasCarry used only by the duplicate at the bottom of the
+    // original file — now removed. The local fun inside generateNumbersForKC covers it.
 }

@@ -5,13 +5,16 @@ enum class KCState { NOT_LEARNED, LEARNED }
 class StudentModel {
 
     // Official mastery state — only CUSUM (via AdaptiveEngine.onMastery) may promote a KC
+    // Covers addition ids 1–10 and subtraction ids 11–18
     val kcStates: MutableMap<Int, KCState> = mutableMapOf<Int, KCState>().apply {
-        for (id in 1..10) put(id, KCState.NOT_LEARNED)
+        for (id in 1..10)  put(id, KCState.NOT_LEARNED)
+        for (id in 11..18) put(id, KCState.NOT_LEARNED)
     }
 
     // BKT internal belief P(learned) — updated after each answer, never sets mastery
     private val bktBelief: MutableMap<Int, Double> = mutableMapOf<Int, Double>().apply {
-        for (id in 1..10) put(id, 0.0)
+        for (id in 1..10)  put(id, 0.0)
+        for (id in 11..18) put(id, 0.0)
     }
 
     fun isMastered(kcId: Int): Boolean = kcStates[kcId] == KCState.LEARNED
@@ -59,7 +62,7 @@ class StudentModel {
 
     fun getBktBelief(kcId: Int): Double = bktBelief[kcId] ?: 0.0
 
-    fun status(): String = kcStates.entries.joinToString("\n") { (id, state) ->
+    fun status(): String = kcStates.entries.sortedBy { it.key }.joinToString("\n") { (id, state) ->
         "KC $id [${KnowledgeRepository.components[id]?.name}]: $state " +
                 "(BKT belief: ${"%.2f".format(bktBelief[id] ?: 0.0)})"
     }
