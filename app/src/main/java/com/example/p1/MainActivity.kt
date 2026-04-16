@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity() {
 
         fun selectOp(btn: MaterialButton, op: String) {
             selectedOp = op
+            engine.setOperation(op)          // ← switch concept graph
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             btn.setBackgroundColor(colorOn)
             startBtn.isEnabled = true
@@ -134,7 +135,17 @@ class MainActivity : AppCompatActivity() {
             scoreText?.text = "$correct/$total"
             answerButtons.forEach { it.isEnabled = true }
             answerButtons.forEachIndexed { i, btn ->
-                btn.text = loc(answers[i].toString())
+                val label = loc(answers[i].toString())
+                btn.text = label
+                // Shrink text size based on digit count so number always fits on one line
+                val digits = answers[i].toString().length
+                val sp = when {
+                    digits >= 5 -> 13f
+                    digits == 4 -> 15f
+                    digits == 3 -> 17f
+                    else        -> 19f
+                }
+                btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
                 btn.setOnClickListener {
                     answerButtons.forEach { it.isEnabled = false }
                     val ok = answers[i] == engine.correctAnswer
@@ -170,7 +181,8 @@ class MainActivity : AppCompatActivity() {
         fun applyScaledText(visW: Int, visH: Int) {
             if (visW <= 0 || visH <= 0) return
             scoreText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, ssp(0.07f, visW, visH))
-            answerButtons.forEach { it.setTextSize(TypedValue.COMPLEX_UNIT_SP, ssp(0.10f, visW, visH)) }
+            // 0.07 ratio ensures 4-digit numbers fit within the button width
+            answerButtons.forEach { it.setTextSize(TypedValue.COMPLEX_UNIT_SP, ssp(0.07f, visW, visH)) }
         }
 
         var rotationStep = 0

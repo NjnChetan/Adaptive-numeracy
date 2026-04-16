@@ -7,7 +7,7 @@ class AdaptiveEngine {
     val student = StudentModel()
 
     // ── FPR now matches Python notebook exactly: 0.00009 → beta ≈ 9.32
-    // Python call: klucbCUSUM({\"A\"}, ..., fpr=0.00009, ...)
+    // Python call: klucbCUSUM({"A"}, ..., fpr=0.00009, ...)
     // beta = log(1/fpr) = log(1/0.00009) ≈ 9.32
     // This requires ~6 consecutive correct answers to declare mastery.
     private val fpr  = 0.00009
@@ -17,6 +17,29 @@ class AdaptiveEngine {
     private val cusumDetectors = mutableMapOf<Int, CUSUMDetector>()
     private var ts             = 0
     private var currentKC      = 1
+
+    // ── Operation type ────────────────────────────────────────────────────────
+    // "+" for addition (KCs 1–9), "-" for subtraction (KCs 10–17)
+    private var operationType: String = "+"
+
+    /** Set the active operation — resets the engine for that graph */
+    fun setOperation(op: String) {
+        operationType = op
+        // Reset state for clean start on new operation
+        bandit.clearAll()
+        cusumDetectors.clear()
+        ts = 0
+        focusKC = null
+        focusQuestionCount = 0
+        consecutiveWrong = 0
+        initZPD()
+    }
+
+    /** Returns the list of KC IDs for the currently selected operation */
+    private fun activeKCIds(): List<Int> = when (operationType) {
+        "-"  -> KnowledgeRepository.subtractionIds
+        else -> KnowledgeRepository.additionIds
+    }
 
     // ── Focus mode ────────────────────────────────────────────────────────────
     private var focusKC:            Int? = null
@@ -47,7 +70,9 @@ class AdaptiveEngine {
     //   trace_ancestor_dict[t] = list of ZPD ancestors of t
     // ─────────────────────────────────────────────────────────────────────────
     private fun initZPD() {
-        val initZpd = KnowledgeRepository.getZPD(student)
+        kcAncestors.clear()
+        val filterIds = activeKCIds()
+        val initZpd = KnowledgeRepository.getZPD(student, filterIds)
 
         // Find all KCs reachable (directly or transitively) from the initial ZPD
         val reachable = mutableSetOf<Int>()
@@ -55,6 +80,7 @@ class AdaptiveEngine {
         while (seed.isNotEmpty()) {
             val kcId = seed.removeFirst()
             val children = KnowledgeRepository.getChildren(kcId)
+                .filter { it in filterIds }   // only consider KCs in current operation
             for (child in children) {
                 if (reachable.add(child)) seed.addLast(child)
             }
@@ -99,7 +125,8 @@ class AdaptiveEngine {
     // generateQuestion
     // ─────────────────────────────────────────────────────────────────────────
     fun generateQuestion(): Pair<String, List<Int>> {
-        val zpd = KnowledgeRepository.getZPD(student)
+        val filterIds = activeKCIds()
+        val zpd = KnowledgeRepository.getZPD(student, filterIds)
         for (kcId in zpd) addArmIfNeeded(kcId)
 
         if (bandit.activeArms().isEmpty()) {
@@ -109,9 +136,11 @@ class AdaptiveEngine {
         currentKC = chooseKC(zpd)
 
         val (num1, num2) = generateNumbersForKC(currentKC)
-        correctAnswer    = num1 + num2
+        val op = KnowledgeRepository.getOperationType(currentKC)
+        correctAnswer = if (op == "-") num1 - num2 else num1 + num2
 
-        val question = "$num1 + $num2 = ?"
+        val opSymbol = if (op == "-") "−" else "+"
+        val question = "$num1 $opSymbol $num2 = ?"
 
         val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
         val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -176,7 +205,9 @@ class AdaptiveEngine {
         for (ancestors in kcAncestors.values) ancestors.remove(kcId)
 
         // Unlock children — only if ALL their ancestors are now mastered
+        val filterIds = activeKCIds()
         val children = KnowledgeRepository.getChildren(kcId)
+            .filter { it in filterIds }
         for (childKc in children) {
             // Matches Python:
             //   if t in trace_ancestor_dict and
@@ -194,7 +225,7 @@ class AdaptiveEngine {
         }
 
         // Also re-check the full ZPD in case getZPD picks up anything missed
-        for (newKc in KnowledgeRepository.getZPD(student)) addArmIfNeeded(newKc)
+        for (newKc in KnowledgeRepository.getZPD(student, filterIds)) addArmIfNeeded(newKc)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -242,7 +273,7 @@ class AdaptiveEngine {
             .map { it.name }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Problem generation — unchanged
+    // Problem generation — addition + subtraction
     // ─────────────────────────────────────────────────────────────────────────
     private fun generateNumbersForKC(kcId: Int): Pair<Int, Int> {
 
@@ -270,17 +301,67 @@ class AdaptiveEngine {
             return c
         }
 
+        /** Check if subtracting b from a requires borrowing at any digit position */
+        fun hasBorrow(a: Int, b: Int): Boolean {
+            var x = a; var y = b
+            while (x > 0 || y > 0) {
+                if ((x % 10) < (y % 10)) return true
+                x /= 10; y /= 10
+            }
+            return false
+        }
+
+        /** Count how many digit positions need borrowing */
+        fun borrowCount(a: Int, b: Int): Int {
+            var x = a; var y = b; var c = 0; var borrow = 0
+            while (x > 0 || y > 0) {
+                val xd = x % 10 - borrow
+                val yd = y % 10
+                if (xd < yd) { c++; borrow = 1 } else { borrow = 0 }
+                x /= 10; y /= 10
+            }
+            return c
+        }
+
         return when (kcId) {
+            // ── ADDITION ─────────────────────────────────────────────────────
+            // 1A: 1-digit + 1-digit, no carry (sum < 10)
             1  -> { var a: Int; var b: Int; do { a = (1..9).random(); b = (1..9).random() } while (a + b >= 10); Pair(a, b) }
-            2  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasCarry(a, b)); Pair(a, b) }
-            3  -> { var a: Int; var b: Int; do { a = (1..9).random(); b = (1..9).random() } while (a + b < 10); Pair(a, b) }
-            4  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (hasCarry(a, b)); Pair(a, b) }
-            5  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (!hasCarry(a, b)); Pair(a, b) }
+            // 1AC: 1-digit + 1-digit, with carry (sum >= 10)
+            2  -> { var a: Int; var b: Int; do { a = (1..9).random(); b = (1..9).random() } while (a + b < 10); Pair(a, b) }
+            // 2A1: 2-digit + 1-digit, no carry
+            3  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (hasCarry(a, b)); Pair(a, b) }
+            // 2A1C: 2-digit + 1-digit, with carry
+            4  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (!hasCarry(a, b)); Pair(a, b) }
+            // 2A2: 2-digit + 2-digit, no carry
+            5  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasCarry(a, b)); Pair(a, b) }
+            // 2A2C: 2-digit + 2-digit, double carry
             6  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (!hasCarry(a, b)); Pair(a, b) }
+            // 3A: 3-digit + 3-digit, no carry
             7  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (hasCarry(a, b)); Pair(a, b) }
+            // 3AC: 3-digit + 3-digit, single carry
             8  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) != 1); Pair(a, b) }
-            9  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) != 2); Pair(a, b) }
-            10 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) < 3); Pair(a, b) }
+            // 3AC2: 3-digit + 3-digit, double carry
+            9  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) < 2); Pair(a, b) }
+
+            // ── SUBTRACTION ──────────────────────────────────────────────────
+            // 1S: 1-digit − 1-digit, no borrow (a > b, single digit result)
+            10 -> { var a: Int; var b: Int; do { a = (2..9).random(); b = (1..9).random() } while (b >= a); Pair(a, b) }
+            // 2S1: 2-digit − 1-digit, no borrow
+            11 -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (hasBorrow(a, b)); Pair(a, b) }
+            // 2S1B: 2-digit − 1-digit, with borrow
+            12 -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (!hasBorrow(a, b) || a - b < 1); Pair(a, b) }
+            // 2S2: 2-digit − 2-digit, no borrow
+            13 -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasBorrow(a, b) || a <= b); Pair(a, b) }
+            // 3S: 3-digit − 3-digit, no borrow
+            14 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (hasBorrow(a, b) || a <= b); Pair(a, b) }
+            // 2S2B: 2-digit − 2-digit, with borrow
+            15 -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (!hasBorrow(a, b) || a <= b); Pair(a, b) }
+            // 3SB: 3-digit − 3-digit, single borrow
+            16 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) != 1 || a <= b); Pair(a, b) }
+            // 3SB2: 3-digit − 3-digit, double borrow
+            17 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) < 2 || a <= b); Pair(a, b) }
+
             else -> Pair(1, 1)
         }
     }

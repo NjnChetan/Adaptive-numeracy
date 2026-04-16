@@ -6,9 +6,9 @@ enum class KCState { NOT_LEARNED, LEARNED }
 
 class StudentModel {
 
-    // Official mastery state
+    // Official mastery state — covers all 17 KCs (addition 1–9, subtraction 10–17)
     val kcStates: MutableMap<Int, KCState> = mutableMapOf<Int, KCState>().apply {
-        for (id in 1..10) put(id, KCState.NOT_LEARNED)
+        for (id in 1..17) put(id, KCState.NOT_LEARNED)
     }
 
     fun isMastered(kcId: Int): Boolean = kcStates[kcId] == KCState.LEARNED

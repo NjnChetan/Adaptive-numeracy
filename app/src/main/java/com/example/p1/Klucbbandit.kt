@@ -272,6 +272,9 @@ class KLUCBBandit {
 
     fun removeArm(kcId: Int) { nodes.remove(kcId) }
 
+    /** Clear all arms — called when switching between addition and subtraction */
+    fun clearAll() { nodes.clear() }
+
     fun hasArm(kcId: Int): Boolean = kcId in nodes
     fun activeArms(): Set<Int>     = nodes.keys.toSet()
     fun getNode(kcId: Int): KLUCBNode? = nodes[kcId]
