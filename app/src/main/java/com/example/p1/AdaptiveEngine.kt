@@ -113,17 +113,10 @@ class AdaptiveEngine {
 
         val question = "$num1 + $num2 = ?"
 
-        val options = mutableSetOf(correctAnswer)
-        var offset  = 1
-        var attempts = 0
-        while (options.size < 4 && attempts < 100) {
-            val d = (correctAnswer + (-5..5).random()).coerceAtLeast(0)
-            if (d != correctAnswer) options.add(d)
-            attempts++
-        }
-        while (options.size < 4) { options.add(correctAnswer + offset); offset++ }
+        val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
+        val options = (listOf(correctAnswer) + distractors).shuffled()
 
-        return Pair(question, options.shuffled())
+        return Pair(question, options)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
