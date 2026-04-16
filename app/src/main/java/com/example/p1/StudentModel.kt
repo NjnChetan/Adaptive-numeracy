@@ -1,20 +1,14 @@
 package com.example.p1
 
+import kotlin.random.Random
+
 enum class KCState { NOT_LEARNED, LEARNED }
 
 class StudentModel {
 
-    // Official mastery state — only CUSUM (via AdaptiveEngine.onMastery) may promote a KC
-    // Covers addition ids 1–10 and subtraction ids 11–18
+    // Official mastery state
     val kcStates: MutableMap<Int, KCState> = mutableMapOf<Int, KCState>().apply {
-        for (id in 1..10)  put(id, KCState.NOT_LEARNED)
-        for (id in 11..18) put(id, KCState.NOT_LEARNED)
-    }
-
-    // BKT internal belief P(learned) — updated after each answer, never sets mastery
-    private val bktBelief: MutableMap<Int, Double> = mutableMapOf<Int, Double>().apply {
-        for (id in 1..10)  put(id, 0.0)
-        for (id in 11..18) put(id, 0.0)
+        for (id in 1..10) put(id, KCState.NOT_LEARNED)
     }
 
     fun isMastered(kcId: Int): Boolean = kcStates[kcId] == KCState.LEARNED
@@ -22,48 +16,44 @@ class StudentModel {
     /** Called ONLY by AdaptiveEngine.onMastery() after CUSUM fires */
     fun setMastered(kcId: Int) {
         kcStates[kcId] = KCState.LEARNED
-        bktBelief[kcId] = 1.0
     }
 
     /**
-     * BKT belief update — updates bktBelief only, never touches kcStates.
+     * BKT state update — now matches Python Student._update_state() exactly:
      *
-     * Standard BKT:
-     *   posterior = P(L | obs)
-     *   next      = posterior + (1 - posterior) * pT
+     *   def _update_state(self, kc, pre_reqs):
+     *       if any(self.kc_states[x] == NOT_LEARNED for x in pre_reqs):
+     *           p_t = self.pt[kc]["low"]
+     *       else:
+     *           p_t = self.pt[kc]["high"]
+     *       if random() < p_t:
+     *           self.kc_states[kc] = LEARNED
      *
-     * pT uses lowTransition if any prerequisite is unmastered,
-     * highTransition if all prerequisites are mastered.
+     * This is a stochastic flip: each answer attempt independently rolls
+     * against the transition probability. The Python model does NOT use a
+     * continuous belief — it flips the hidden state directly.
+     *
+     * Note: in the Python, _update_state is only called when the KC is
+     * NOT yet learned (matching "if self.kc_states[kc] != KC_STATE.LEARNED").
+     * We preserve that guard here.
      */
     fun bktUpdateBelief(kcId: Int, correct: Boolean) {
-        val pL  = bktBelief[kcId] ?: 0.0
-        val pg  = KnowledgeRepository.getGuessProb(kcId)
-        val ps  = KnowledgeRepository.getSlipProb(kcId)
-        val tp  = KnowledgeRepository.getTransition(kcId)
+        // Only attempt transition if not yet learned (matches Python guard)
+        if (kcStates[kcId] == KCState.LEARNED) return
 
+        val tp      = KnowledgeRepository.getTransition(kcId)
         val prereqs = KnowledgeRepository.getPrerequisites(kcId)
+
+        // Use low transition if any prereq is unmastered, high if all mastered
         val pT = if (prereqs.any { kcStates[it] == KCState.NOT_LEARNED }) tp.low else tp.high
 
-        val pObs = if (correct) {
-            (pL * (1.0 - ps)) / (pL * (1.0 - ps) + (1.0 - pL) * pg)
-        } else {
-            (pL * ps) / (pL * ps + (1.0 - pL) * (1.0 - pg))
+        // Stochastic flip — matches Python: if random() < p_t: state = LEARNED
+        if (Random.nextDouble() < pT) {
+            kcStates[kcId] = KCState.LEARNED
         }
-
-        bktBelief[kcId] = pObs + (1.0 - pObs) * pT
     }
 
-    fun pCorrect(kcId: Int): Double {
-        val pL = bktBelief[kcId] ?: 0.0
-        val pg = KnowledgeRepository.getGuessProb(kcId)
-        val ps = KnowledgeRepository.getSlipProb(kcId)
-        return pL * (1.0 - ps) + (1.0 - pL) * pg
-    }
-
-    fun getBktBelief(kcId: Int): Double = bktBelief[kcId] ?: 0.0
-
-    fun status(): String = kcStates.entries.sortedBy { it.key }.joinToString("\n") { (id, state) ->
-        "KC $id [${KnowledgeRepository.components[id]?.name}]: $state " +
-                "(BKT belief: ${"%.2f".format(bktBelief[id] ?: 0.0)})"
+    fun status(): String = kcStates.entries.joinToString("\n") { (id, state) ->
+        "KC $id [${KnowledgeRepository.components[id]?.name}]: $state"
     }
 }
