@@ -224,12 +224,19 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
 
         val doRotate = {
             val w = clipView.width; val h = clipView.height
-            rotationStep = if (h > w) { if (rotationStep == 0) 2 else 0 } else (rotationStep + 1) % 4
-            cumulativeDeg += 90f
-            clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
+            if (isPhone) {
+                rotationStep = if (rotationStep == 0) 2 else 0
+                cumulativeDeg = if (rotationStep == 2) 180f else 360f
+                clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
+            } else {
+                rotationStep = if (h > w) { if (rotationStep == 0) 2 else 0 } else (rotationStep + 1) % 4
+                cumulativeDeg += 90f
+                clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
+            }
         }
 
         homeNavRotate?.setOnClickListener { doRotate() }
