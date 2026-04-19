@@ -186,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         var rotationStep = 0
+        var cumulativeDeg = 0f
 
         fun applyRotation(w: Int, h: Int, step: Int) {
             val portrait = step == 1 || step == 3
@@ -198,7 +199,7 @@ class MainActivity : AppCompatActivity() {
             val visW = if (portrait) h else w
             val visH = if (portrait) w else h
             applyScaledText(visW, visH)
-            panelContent.animate().rotation(step * 90f).scaleX(1f).scaleY(1f).setDuration(350).start()
+            panelContent.animate().rotation(cumulativeDeg).scaleX(1f).scaleY(1f).setDuration(350).start()
         }
 
         clipView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -227,6 +228,7 @@ class MainActivity : AppCompatActivity() {
         val doRotate = {
             val w = clipView.width; val h = clipView.height
             rotationStep = if (h > w) { if (rotationStep == 0) 2 else 0 } else (rotationStep + 1) % 4
+            cumulativeDeg += 90f
             clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
         }
 
