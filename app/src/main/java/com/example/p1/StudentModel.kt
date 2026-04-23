@@ -20,6 +20,13 @@ class StudentModel {
         kcStates[kcId] = KCState.LEARNED
     }
 
+    fun reset() {
+        for (id in 1..17) {
+            kcStates[id] = KCState.NOT_LEARNED
+            bktBelief[id] = 0.0
+        }
+    }
+
     fun bktUpdateBelief(kcId: Int, correct: Boolean) {
         if (kcStates[kcId] == KCState.LEARNED) return
 

@@ -289,7 +289,9 @@ class KLUCBBandit {
      */
     fun selectConcept(zpd: List<Int>): Int {
         val active = zpd.filter { it in nodes }
-        if (active.isEmpty()) return zpd.first()
+        if (active.isEmpty()) {
+            return if (zpd.isNotEmpty()) zpd.first() else 1
+        }
 
         active.firstOrNull { nodes[it]!!.timesPlayed == 0 }
             ?.let { return it }

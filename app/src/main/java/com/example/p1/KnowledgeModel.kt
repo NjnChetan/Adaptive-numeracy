@@ -16,16 +16,16 @@ data class TransitionProb(val low: Double, val high: Double)
 // ADDITION syllabus graph (9 nodes, IDs 1–9):
 //
 //                  1A                        id=1
-//           /       |
-//        1AC       2A1                       id=2, 3
-//          \       / \
-//          2A1C    2A2                       id=4, 5
-//         /    \     \
-//       2A2C   |      3A                    id=6, 7
-//              \     /
-//              3AC                          id=8
-//               |
-//             3AC2                          id=9
+//                /   |
+//              1AC   2A1                       id=2, 3
+//               \   / \
+//                2A1C  2A2                     id=4, 5
+//               /  \    \
+//             2A2C  |    3A                    id=6, 7
+//                   \   /
+//                    3AC                       id=8
+//                     |
+//                   3AC2                       id=9
 //
 // Edges (parent → child):
 //   1A   → 1AC, 2A1
@@ -118,7 +118,7 @@ object KnowledgeRepository {
 
         // ── Level 5 — convergence (prereq: 2A1C + 3A) ─────────────────────────
         8 to KnowledgeComponent(
-            id = 8, name = "3AC: 3-digit + 3-digit, single carry",
+            id = 8, name = "3AC: 3-digit + 2-digit, single carry",
             prerequisites    = listOf(4, 7),    // 2A1C + 3A
             lowTransition    = 0.01, highTransition    = 0.15,
             guessProbability = 0.05, slipProbability   = 0.100),

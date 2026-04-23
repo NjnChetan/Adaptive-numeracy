@@ -1,13 +1,13 @@
 package com.example.p1
 
-import kotlin.math.ln
+import kotlin.math.pow
 
 class AdaptiveEngine {
 
     val student = StudentModel()
 
     // ── FPR now matches Python notebook exactly: 0.00009 → beta ≈ 9.32
-    // Python call: klucbCUSUM({"A"}, ..., fpr=0.00009, ...)
+    // Python call: klUCB-CUSUM({"A"}, ..., fpr=0.00009, ...)
     // beta = log(1/fpr) = log(1/0.00009) ≈ 9.32
     // This requires ~6 consecutive correct answers to declare mastery.
     private val fpr  = 0.00009
@@ -17,6 +17,11 @@ class AdaptiveEngine {
     private val cusumDetectors = mutableMapOf<Int, CUSUMDetector>()
     private var ts             = 0
     private var currentKC      = 1
+
+    // ── Phase tracking ────────────────────────────────────────────────────────
+    enum class Phase { ASSESSMENT, LEARNING }
+    private var currentPhase = Phase.ASSESSMENT
+    private var assessmentResponseString = ""
 
     // ── Operation type ────────────────────────────────────────────────────────
     // "+" for addition (KCs 1–9), "-" for subtraction (KCs 10–17)
@@ -32,6 +37,9 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
+        currentPhase = Phase.ASSESSMENT
+        assessmentResponseString = ""
+        student.reset() // Clear mastery
         initZPD()
     }
 
@@ -45,8 +53,8 @@ class AdaptiveEngine {
     private var focusKC:            Int? = null
     private var focusQuestionCount: Int  = 0
     private var consecutiveWrong:   Int  = 0
-    private val MIN_FOCUS                = 5
-    private val FRUSTRATION_LIMIT        = 12
+    private val minFocus                 = 5
+    private val frustrationLimit         = 12
 
     // ── ZPD ancestor tracking — mirrors Python's trace_ancestor_dict ──────────
     // For each KC that is not yet in the ZPD, we track which active ZPD KCs
@@ -54,7 +62,7 @@ class AdaptiveEngine {
     // A locked KC is only unlocked when ALL its ancestors have been mastered,
     // matching the Python check:
     //   if t in trace_ancestor_dict and
-    //      any(tr in unsolvable for tr in trace_ancestor_dict[t]):
+    //      any(ancestor in unsolvable for ancestor in trace_ancestor_dict[t]):
     //        continue   ← don't unlock yet
     private val kcAncestors = mutableMapOf<Int, MutableSet<Int>>()
 
@@ -125,15 +133,26 @@ class AdaptiveEngine {
     // generateQuestion
     // ─────────────────────────────────────────────────────────────────────────
     fun generateQuestion(): Pair<String, List<Int>> {
+        return if (currentPhase == Phase.ASSESSMENT) {
+            generateAssessmentQuestion()
+        } else {
+            generateLearningQuestion()
+        }
+    }
+
+    private fun generateLearningQuestion(): Pair<String, List<Int>> {
+
         val filterIds = activeKCIds()
         val zpd = KnowledgeRepository.getZPD(student, filterIds)
+
         for (kcId in zpd) addArmIfNeeded(kcId)
 
-        if (bandit.activeArms().isEmpty()) {
-            return Pair("🎉 All concepts mastered!", listOf(0, 0, 0, 0))
+        currentKC = if (zpd.isEmpty()) {
+            // If everything mastered, pick the last KC (hardest) to continue practice
+            if (filterIds.isNotEmpty()) filterIds.last() else 1
+        } else {
+            chooseKC(zpd)
         }
-
-        currentKC = chooseKC(zpd)
 
         val (num1, num2) = generateNumbersForKC(currentKC)
         val op = KnowledgeRepository.getOperationType(currentKC)
@@ -148,12 +167,56 @@ class AdaptiveEngine {
         return Pair(question, options)
     }
 
+    private fun generateAssessmentQuestion(): Pair<String, List<Int>> =
+        when (val state = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+")) {
+            is BoundaryAssessmentEngine.BoundaryState.Ask -> {
+                val kcId = BoundaryAssessmentEngine.NODE_TO_ID[state.nodeName] ?: 1
+                currentKC = kcId
+
+                val (num1, num2) = generateNumbersForKC(currentKC)
+                val op = KnowledgeRepository.getOperationType(currentKC)
+                correctAnswer = if (op == "-") num1 - num2 else num1 + num2
+
+                val opSymbol = if (op == "-") "−" else "+"
+                val question = "$num1 $opSymbol $num2 = ?"
+
+                val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
+                val options = (listOf(correctAnswer) + distractors).shuffled()
+
+                Pair(question, options)
+            }
+            is BoundaryAssessmentEngine.BoundaryState.Terminal -> {
+                handleTerminalAssessment(state)
+                // Switch phase safely
+                currentPhase = Phase.LEARNING
+                // Now generate next learning question
+                generateLearningQuestion()
+            }
+            else -> {
+                // Safety fallback: if state is null or unknown, just move to learning
+                currentPhase = Phase.LEARNING
+                initZPD()
+                generateLearningQuestion()
+            }
+        }
+
     // ─────────────────────────────────────────────────────────────────────────
     // submitAnswer
     // ─────────────────────────────────────────────────────────────────────────
     fun submitAnswer(selected: Int): String {
         val isCorrect = selected == correctAnswer
         ts++
+
+        if (currentPhase == Phase.ASSESSMENT) {
+            assessmentResponseString += if (isCorrect) "1" else "0"
+            val nextState = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+")
+
+            if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
+                handleTerminalAssessment(nextState)
+                currentPhase = Phase.LEARNING   // ✅ switch here
+            }
+            return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
+        }
 
         bandit.update(currentKC, isCorrect)
 
@@ -175,10 +238,29 @@ class AdaptiveEngine {
                     "${if (isCorrect) "✓" else "✗"}  " +
                     "CUSUM=${"%.2f".format(stat)}/${"%.2f".format(beta)} " +
                     "(${"%.0f".format(prog * 100)}%)  " +
-                    "focus_q=$focusQuestionCount  consec_wrong=$consecutiveWrong"
+                    "focus_q=$focusQuestionCount  consecutive_wrong=$consecutiveWrong"
         )
 
         return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
+    }
+
+    private fun handleTerminalAssessment(terminal: BoundaryAssessmentEngine.BoundaryState.Terminal) {
+        println("── Assessment Terminal State reached ──")
+        println("  Solvable: ${terminal.solvable}")
+        println("  Boundary: ${terminal.boundary}")
+
+        // Initialize student model with discovered mastery
+        for (nodeName in terminal.solvable) {
+            val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName]
+            if (kcId != null) {
+                student.setMastered(kcId)
+                bandit.removeArm(kcId)       // ← Ensure mastered arms are removed
+                cusumDetectors.remove(kcId) // ← and detectors too
+            }
+        }
+
+        currentPhase = Phase.LEARNING
+        initZPD() // Re-calculate ZPD based on new mastery
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -187,7 +269,7 @@ class AdaptiveEngine {
     //   del ucb1_trace_node_dict[chosen_trace]
     //   for t in progression_graph[chosen_trace]:
     //       if t in trace_ancestor_dict and
-    //          any(tr in unsolvable for tr in trace_ancestor_dict[t]):
+    //          any(ancestor in unsolvable for ancestor in trace_ancestor_dict[t]):
     //           continue        ← still has unmastered ancestors, skip
     //       if t not in ucb1_trace_node_dict:
     //           ucb1_trace_node_dict[t] = KLUCB_Node2(ts, ...)
@@ -211,10 +293,10 @@ class AdaptiveEngine {
         for (childKc in children) {
             // Matches Python:
             //   if t in trace_ancestor_dict and
-            //      any(tr in unsolvable for tr in trace_ancestor_dict[t]):
+            //      any(ancestor in unsolvable for ancestor in trace_ancestor_dict[t]):
             //       continue
             val remainingAncestors = kcAncestors[childKc]
-            if (remainingAncestors != null && remainingAncestors.isNotEmpty()) {
+            if (!remainingAncestors.isNullOrEmpty()) {
                 // Still has unmastered ancestors — don't unlock yet
                 continue
             }
@@ -234,9 +316,9 @@ class AdaptiveEngine {
     private fun chooseKC(zpd: List<Int>): Int {
         val focus = focusKC
         if (focus != null &&
-            focus in zpd &&
+            focusKC in zpd &&
             bandit.hasArm(focus) &&
-            focusQuestionCount < MIN_FOCUS) {
+            focusQuestionCount < minFocus) {
             focusQuestionCount++
             return focus
         }
@@ -250,7 +332,7 @@ class AdaptiveEngine {
     private fun updateFocusTracking(correct: Boolean) {
         if (!correct) {
             consecutiveWrong++
-            if (consecutiveWrong >= FRUSTRATION_LIMIT) {
+            if (consecutiveWrong >= frustrationLimit) {
                 println("⚠️ Frustration exit on KC $currentKC after $consecutiveWrong wrong")
                 focusKC            = null
                 focusQuestionCount = 0
@@ -261,16 +343,6 @@ class AdaptiveEngine {
         }
     }
 
-    fun getCurrentKCName(): String =
-        KnowledgeRepository.components[currentKC]?.name ?: "?"
-
-    fun getMasteryProgress(kcId: Int): Double =
-        cusumDetectors[kcId]?.getProgress() ?: 0.0
-
-    fun getMasteredKCs(): List<String> =
-        KnowledgeRepository.components.values
-            .filter { student.isMastered(it.id) }
-            .map { it.name }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Problem generation — addition + subtraction
@@ -278,8 +350,8 @@ class AdaptiveEngine {
     private fun generateNumbersForKC(kcId: Int): Pair<Int, Int> {
 
         fun nDigit(n: Int): Int {
-            val lo = Math.pow(10.0, (n - 1).toDouble()).toInt()
-            val hi = Math.pow(10.0, n.toDouble()).toInt() - 1
+            val lo = 10.0.pow(n - 1).toInt()
+            val hi = 10.0.pow(n).toInt() - 1
             return (lo..hi).random()
         }
 
@@ -301,7 +373,7 @@ class AdaptiveEngine {
             return c
         }
 
-        /** Check if subtracting b from a requires borrowing at any digit position */
+        /** Check if subtracting b from a needs borrowing at any digit position */
         fun hasBorrow(a: Int, b: Int): Boolean {
             var x = a; var y = b
             while (x > 0 || y > 0) {
@@ -336,11 +408,11 @@ class AdaptiveEngine {
             // 2A2: 2-digit + 2-digit, no carry
             5  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasCarry(a, b)); Pair(a, b) }
             // 2A2C: 2-digit + 2-digit, double carry
-            6  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (!hasCarry(a, b)); Pair(a, b) }
+            6  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (carryCount(a, b) != 2); Pair(a, b) }
             // 3A: 3-digit + 3-digit, no carry
             7  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (hasCarry(a, b)); Pair(a, b) }
-            // 3AC: 3-digit + 3-digit, single carry
-            8  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) != 1); Pair(a, b) }
+            // 3AC: 3-digit + 2-digit, single carry
+            8  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(2) } while (carryCount(a, b) != 1); Pair(a, b) }
             // 3AC2: 3-digit + 3-digit, double carry
             9  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) < 2); Pair(a, b) }
 
@@ -364,14 +436,5 @@ class AdaptiveEngine {
 
             else -> Pair(1, 1)
         }
-    }
-
-    private fun hasCarry(a: Int, b: Int): Boolean {
-        var x = a; var y = b
-        while (x > 0 || y > 0) {
-            if ((x % 10) + (y % 10) >= 10) return true
-            x /= 10; y /= 10
-        }
-        return false
     }
 }
