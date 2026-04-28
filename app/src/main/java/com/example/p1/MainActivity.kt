@@ -53,8 +53,16 @@ class MainActivity : AppCompatActivity() {
         val panel        = findViewById<View>(panelId) ?: return
         val clipView     = findViewById<View>(clipId)  ?: return
         val panelContent = panel.findViewById<View>(R.id.panelContent) ?: return
+        val digitLayout  = panel.findViewById<View>(R.id.digitLayout)  ?: return
         val homeLayout   = panel.findViewById<View>(R.id.homeLayout)   ?: return
         val quizLayout   = panel.findViewById<View>(R.id.quizLayout)   ?: return
+
+        // Digit selection buttons
+        val btn1Digit = panel.findViewById<MaterialButton>(R.id.btn1Digit) ?: return
+        val btn2Digit = panel.findViewById<MaterialButton>(R.id.btn2Digit) ?: return
+        val btn3Digit = panel.findViewById<MaterialButton>(R.id.btn3Digit) ?: return
+        val digitNavHome   = panel.findViewById<View>(R.id.digitNavHome)
+        val digitNavRotate = panel.findViewById<View>(R.id.digitNavRotate)
 
         val langToggle = panel.findViewById<SwitchCompat>(R.id.langToggle)
         val btnAdd     = panel.findViewById<MaterialButton>(R.id.btnAdd)   ?: return
@@ -112,6 +120,25 @@ class MainActivity : AppCompatActivity() {
             return s.map { if (it.isDigit()) m[it - '0'] else it }.joinToString("")
         }
         fun loc(s: String) = if (isMarathi) toMarathi(s) else s
+
+        val colorDigitOn  = Color.parseColor("#2B3A8C")
+        val digitButtons  = listOf(btn1Digit, btn2Digit, btn3Digit)
+
+        fun selectDigit(mode: Int) {
+            engine.applyDigitMode(mode)
+            // reset op selection
+            selectedOp = null
+            opButtons.forEach { it.setBackgroundColor(colorOff) }
+            startBtn.isEnabled = false
+            startBtn.setBackgroundColor(colorOff)
+            digitLayout.visibility = View.GONE
+            homeLayout.visibility  = View.VISIBLE
+            digitButtons.forEachIndexed { i, b -> b.setBackgroundColor(if (i + 1 == mode) colorDigitOn else colorOff) }
+        }
+
+        btn1Digit.setOnClickListener { selectDigit(1) }
+        btn2Digit.setOnClickListener { selectDigit(2) }
+        btn3Digit.setOnClickListener { selectDigit(3) }
 
         fun selectOp(btn: MaterialButton, op: String) {
             selectedOp = op
@@ -172,11 +199,16 @@ class MainActivity : AppCompatActivity() {
             loadQuestion()
         }
 
-        homeNavHome?.setOnClickListener { }
-        navHome?.setOnClickListener {
-            quizLayout.visibility = View.GONE
-            homeLayout.visibility = View.VISIBLE
+        homeNavHome?.setOnClickListener {
+            homeLayout.visibility  = View.GONE
+            digitLayout.visibility = View.VISIBLE
         }
+        navHome?.setOnClickListener {
+            quizLayout.visibility  = View.GONE
+            digitLayout.visibility = View.VISIBLE
+            homeLayout.visibility  = View.GONE
+        }
+        digitNavHome?.setOnClickListener { /* already on digit screen */ }
 
         fun applyScaledText(visW: Int, visH: Int) {
             if (visW <= 0 || visH <= 0) return
@@ -241,5 +273,6 @@ class MainActivity : AppCompatActivity() {
 
         homeNavRotate?.setOnClickListener { doRotate() }
         navRotate?.setOnClickListener { doRotate() }
+        digitNavRotate?.setOnClickListener { doRotate() }
     }
 }

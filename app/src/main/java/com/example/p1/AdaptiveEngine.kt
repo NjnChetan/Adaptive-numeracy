@@ -22,6 +22,16 @@ class AdaptiveEngine {
     // ── Operation type ────────────────────────────────────────────────────────
     private var operationType: String = "+"
 
+    // ── Digit mode ────────────────────────────────────────────────────────────
+    // 1 = 1-digit only (KCs 1,2 / 10,11), no boundary assessment
+    // 2 = up to 2-digit  (KCs 1-6 / 10-15), no boundary assessment
+    // 3 = full graph + boundary assessment
+    private var digitMode: Int = 3
+
+    fun applyDigitMode(mode: Int) {
+        digitMode = mode
+    }
+
     /** Set the active operation — resets the engine for that graph */
     fun setOperation(op: String) {
         operationType = op
@@ -31,20 +41,27 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        currentPhase = Phase.ASSESSMENT
+        // Boundary assessment only in mode 3
+        currentPhase = if (digitMode == 3) Phase.ASSESSMENT else Phase.LEARNING
         assessmentResponseString = ""
         student.reset()
-        // Clear assessment CUSUM state
         assessmentCusum.clear()
         assessmentAnswers.clear()
         assessmentNodeDecided = false
         initZPD()
     }
 
-    /** Returns the list of KC IDs for the currently selected operation */
-    private fun activeKCIds(): List<Int> = when (operationType) {
-        "-"  -> KnowledgeRepository.subtractionIds
-        else -> KnowledgeRepository.additionIds
+    /** Returns the list of KC IDs for the currently selected operation, filtered by digitMode */
+    private fun activeKCIds(): List<Int> {
+        val base = when (operationType) {
+            "-"  -> KnowledgeRepository.subtractionIds   // 10..17
+            else -> KnowledgeRepository.additionIds       // 1..9
+        }
+        return when (digitMode) {
+            1    -> if (operationType == "-") listOf(10, 11) else listOf(1, 2)
+            2    -> if (operationType == "-") listOf(10, 11, 12, 13, 14, 15) else listOf(1, 2, 3, 4, 5, 6)
+            else -> base
+        }
     }
 
     // ── Focus mode ────────────────────────────────────────────────────────────
