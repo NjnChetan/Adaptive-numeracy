@@ -142,7 +142,7 @@ private fun klPrime(p: Double): (Double) -> Double =
 
 /** f''(q) — translated from Python klDPrime(p) */
 private fun klDPrime(p: Double): (Double) -> Double =
-    { q -> (-p / q.pow(2)) + ((1.0 - p) / (1.0 - q).pow(2)) }
+    { q -> (p / q.pow(2)) + ((1.0 - p) / (1.0 - q).pow(2)) }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Newton–Raphson / Halley solver — now matches Python's retry loop exactly:
