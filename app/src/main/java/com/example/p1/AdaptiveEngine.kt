@@ -23,11 +23,16 @@ class AdaptiveEngine {
     private var operationType: String = "+"
 
     // ── Digit mode ────────────────────────────────────────────────────────────
-    // 1 = 1-digit only (KCs 1,2 / 10,11), no boundary assessment
-    // 2 = up to 2-digit  (KCs 1-6 / 10-15), no boundary assessment
-    // 3 = full graph + boundary assessment
+    // 1 = 1-digit only (KCs 1-2 / 10-11), skip assessment, straight to learning
+    // 2 = up to 2-digit (KCs 1-6 / 10-15), skip assessment
+    // 3 = full graph + boundary assessment (default)
     private var digitMode: Int = 3
 
+    /**
+     * Set digit mode — call this before setOperation.
+     * Modes 1/2 skip boundary assessment and go straight to learning.
+     * Mode 3 runs the full boundary assessment first.
+     */
     fun applyDigitMode(mode: Int) {
         digitMode = mode
     }
@@ -41,25 +46,22 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        // Boundary assessment only in mode 3
+        // Mode 3 = full assessment; modes 1/2 skip straight to learning
         currentPhase = if (digitMode == 3) Phase.ASSESSMENT else Phase.LEARNING
         assessmentResponseString = ""
         student.reset()
-        assessmentCusum.clear()
         assessmentAnswers.clear()
         assessmentNodeDecided = false
         initZPD()
     }
 
-    /** Returns the list of KC IDs for the currently selected operation, filtered by digitMode */
+    /** Returns the KC IDs allowed for current operation + digit mode */
     private fun activeKCIds(): List<Int> {
-        val base = when (operationType) {
-            "-"  -> KnowledgeRepository.subtractionIds   // 10..17
-            else -> KnowledgeRepository.additionIds       // 1..9
-        }
+        val base = if (operationType == "-") KnowledgeRepository.subtractionIds
+        else KnowledgeRepository.additionIds
         return when (digitMode) {
             1    -> if (operationType == "-") listOf(10, 11) else listOf(1, 2)
-            2    -> if (operationType == "-") listOf(10, 11, 12, 13, 14, 15) else listOf(1, 2, 3, 4, 5, 6)
+            2    -> if (operationType == "-") (10..15).toList() else (1..6).toList()
             else -> base
         }
     }
@@ -77,24 +79,11 @@ class AdaptiveEngine {
     var correctAnswer: Int = 0
         private set
 
-    // ── Assessment CUSUM state ────────────────────────────────────────────────
-    // One CUSUMDetector per assessment node, created fresh each time we enter a node.
-    // assessmentAnswers tracks raw correct/wrong for fallback majority vote.
-    // assessmentNodeDecided = true means CUSUM has already fired for current node
-    // (either pass or fail) and we're waiting for generateQuestion to advance.
-    private val assessmentCusum   = mutableMapOf<Int, CUSUMDetector>()
+    // ── Assessment state ──────────────────────────────────────────────────────
+    // assessmentAnswers: per-node list of correct/wrong (max 2 entries)
+    // assessmentNodeDecided: true once verdict reached, waiting for next generateQuestion
     private val assessmentAnswers = mutableMapOf<Int, MutableList<Boolean>>()
     private var assessmentNodeDecided = false
-
-    // Max questions per node before forcing a majority decision (safety cap)
-    private val assessmentMaxPerNode = 15
-
-    // Minimum attempts before we can declare FAIL.
-    // Must be high enough that a single accidental wrong doesn't trigger failure.
-    // We declare FAIL when: attempts >= minFailAttempts AND no correct answer
-    // in the last failStreakRequired consecutive attempts.
-    private val minFailAttempts     = 5
-    private val failStreakRequired  = 4   // 4 consecutive wrong → FAIL
 
     init { initZPD() }
 
@@ -145,67 +134,27 @@ class AdaptiveEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Assessment CUSUM helpers
+    // 2-question assessment rule
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Get or create the CUSUM detector for an assessment node */
-    private fun assessmentDetector(kcId: Int): CUSUMDetector {
-        return assessmentCusum.getOrPut(kcId) {
-            val kc = KnowledgeRepository.components[kcId]
-            CUSUMDetector(
-                pg        = kc?.guessProbability ?: 0.10,
-                ps        = kc?.slipProbability  ?: 0.10,
-                threshold = beta
-            )
-        }
-    }
-
     /**
-     * Feed an answer into the assessment CUSUM for the current node.
-     * Returns:
-     *   true  → node PASSED  (append "1" to response string)
-     *   false → node FAILED  (append "0" to response string)
-     *   null  → not decided yet, ask another question for this node
+     * 2-question assessment rule:
+     *   Q1 wrong → FAIL immediately
+     *   Q1 right, Q2 right → PASS
+     *   Q1 right, Q2 wrong → FAIL
      */
     private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
         val answers = assessmentAnswers.getOrPut(kcId) { mutableListOf() }
         answers.add(correct)
 
-        val detector = assessmentDetector(kcId)
-        val mastered = detector.update(correct)
+        println("[ASSESS KC $kcId] Q${answers.size}: ${if (correct) "✓" else "✗"}")
 
-        val attempts = answers.size
-        val correctCount = answers.count { it }
-
-        println(
-            "[ASSESS KC $kcId] ${if (correct) "✓" else "✗"}  " +
-                    "CUSUM=${"%.2f".format(detector.getStatistic())}/${"%.2f".format(beta)}  " +
-                    "attempts=$attempts  correct=$correctCount"
-        )
-
-        // PASS: CUSUM crossed threshold
-        if (mastered) {
-            println("[ASSESS KC $kcId] → PASS (CUSUM mastery)")
-            return true
+        return when {
+            answers.size == 1 && !correct -> { println("[ASSESS KC $kcId] → FAIL (Q1 wrong)"); false }
+            answers.size == 2 && correct  -> { println("[ASSESS KC $kcId] → PASS (Q1+Q2 correct)"); true }
+            answers.size == 2 && !correct -> { println("[ASSESS KC $kcId] → FAIL (Q2 wrong)"); false }
+            else -> null  // Q1 correct, waiting for Q2
         }
-
-        // FAIL: N consecutive wrong answers after minimum attempts reached
-        if (attempts >= minFailAttempts) {
-            val lastN = answers.takeLast(failStreakRequired)
-            if (lastN.size == failStreakRequired && lastN.none { it }) {
-                println("[ASSESS KC $kcId] → FAIL ($failStreakRequired consecutive wrong)")
-                return false
-            }
-        }
-
-        // Safety cap: majority vote after assessmentMaxPerNode attempts
-        if (attempts >= assessmentMaxPerNode) {
-            val pass = correctCount.toDouble() / attempts >= 0.5
-            println("[ASSESS KC $kcId] → ${if (pass) "PASS" else "FAIL"} (cap reached, rate=${"%.2f".format(correctCount.toDouble()/attempts)})")
-            return pass
-        }
-
-        return null  // undecided — keep asking
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -284,7 +233,6 @@ class AdaptiveEngine {
         ts++
 
         if (currentPhase == Phase.ASSESSMENT) {
-            // If node is already decided this round, ignore (shouldn't happen — UI disables buttons)
             if (assessmentNodeDecided) {
                 return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
             }
@@ -292,10 +240,8 @@ class AdaptiveEngine {
             val decision = updateAssessmentNode(currentKC, isCorrect)
 
             if (decision != null) {
-                // Node verdict reached — append to response string and advance dispatch
                 assessmentNodeDecided = true
-                assessmentAnswers.remove(currentKC)   // reset for next time (if node re-visited)
-                assessmentCusum.remove(currentKC)
+                assessmentAnswers.remove(currentKC)
 
                 assessmentResponseString += if (decision) "1" else "0"
 
@@ -305,7 +251,6 @@ class AdaptiveEngine {
                     currentPhase = Phase.LEARNING
                 }
             }
-            // else: undecided — next generateQuestion() call will keep currentKC the same
 
             return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
         }

@@ -57,10 +57,9 @@ class MainActivity : AppCompatActivity() {
         val homeLayout   = panel.findViewById<View>(R.id.homeLayout)   ?: return
         val quizLayout   = panel.findViewById<View>(R.id.quizLayout)   ?: return
 
-        // Digit selection buttons
-        val btn1Digit = panel.findViewById<MaterialButton>(R.id.btn1Digit) ?: return
-        val btn2Digit = panel.findViewById<MaterialButton>(R.id.btn2Digit) ?: return
-        val btn3Digit = panel.findViewById<MaterialButton>(R.id.btn3Digit) ?: return
+        val btn1Digit      = panel.findViewById<MaterialButton>(R.id.btn1Digit) ?: return
+        val btn2Digit      = panel.findViewById<MaterialButton>(R.id.btn2Digit) ?: return
+        val btn3Digit      = panel.findViewById<MaterialButton>(R.id.btn3Digit) ?: return
         val digitNavHome   = panel.findViewById<View>(R.id.digitNavHome)
         val digitNavRotate = panel.findViewById<View>(R.id.digitNavRotate)
 
@@ -88,6 +87,7 @@ class MainActivity : AppCompatActivity() {
         val answerButtons = listOf(option1, option2, option3, option4)
         val colorOn  = Color.parseColor("#2B3A8C")
         val colorOff = Color.parseColor("#8A99CC")
+        val digitButtons = listOf(btn1Digit, btn2Digit, btn3Digit)
 
         scoreText?.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -121,19 +121,17 @@ class MainActivity : AppCompatActivity() {
         }
         fun loc(s: String) = if (isMarathi) toMarathi(s) else s
 
-        val colorDigitOn  = Color.parseColor("#2B3A8C")
-        val digitButtons  = listOf(btn1Digit, btn2Digit, btn3Digit)
-
         fun selectDigit(mode: Int) {
             engine.applyDigitMode(mode)
-            // reset op selection
             selectedOp = null
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             startBtn.isEnabled = false
             startBtn.setBackgroundColor(colorOff)
+            digitButtons.forEachIndexed { i, b ->
+                b.setBackgroundColor(if (i + 1 == mode) colorOn else colorOff)
+            }
             digitLayout.visibility = View.GONE
             homeLayout.visibility  = View.VISIBLE
-            digitButtons.forEachIndexed { i, b -> b.setBackgroundColor(if (i + 1 == mode) colorDigitOn else colorOff) }
         }
 
         btn1Digit.setOnClickListener { selectDigit(1) }
@@ -142,7 +140,7 @@ class MainActivity : AppCompatActivity() {
 
         fun selectOp(btn: MaterialButton, op: String) {
             selectedOp = op
-            engine.setOperation(op)          // ← switch concept graph
+            engine.setOperation(op)
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             btn.setBackgroundColor(colorOn)
             startBtn.isEnabled = true
@@ -164,7 +162,6 @@ class MainActivity : AppCompatActivity() {
             answerButtons.forEachIndexed { i, btn ->
                 val label = loc(answers[i].toString())
                 btn.text = label
-                // Shrink text size based on digit count so number always fits on one line
                 val digits = answers[i].toString().length
                 val sp = when {
                     digits >= 5 -> 13f
@@ -204,16 +201,14 @@ class MainActivity : AppCompatActivity() {
             digitLayout.visibility = View.VISIBLE
         }
         navHome?.setOnClickListener {
-            quizLayout.visibility  = View.GONE
-            digitLayout.visibility = View.VISIBLE
-            homeLayout.visibility  = View.GONE
+            quizLayout.visibility = View.GONE
+            homeLayout.visibility = View.VISIBLE
         }
         digitNavHome?.setOnClickListener { /* already on digit screen */ }
 
         fun applyScaledText(visW: Int, visH: Int) {
             if (visW <= 0 || visH <= 0) return
             scoreText?.setTextSize(TypedValue.COMPLEX_UNIT_SP, ssp(0.07f, visW, visH))
-            // 0.07 ratio ensures 4-digit numbers fit within the button width
             answerButtons.forEach { it.setTextSize(TypedValue.COMPLEX_UNIT_SP, ssp(0.07f, visW, visH)) }
         }
 
@@ -256,6 +251,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+
         val isPhone = resources.configuration.smallestScreenWidthDp < 600
 
         val doRotate = {
