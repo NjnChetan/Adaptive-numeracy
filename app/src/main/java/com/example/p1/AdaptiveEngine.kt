@@ -1,8 +1,11 @@
 package com.example.p1
 
+import android.util.Log
 import kotlin.math.pow
 
 class AdaptiveEngine {
+
+    private val TAG = "AdaptiveSystem"
 
     val student = StudentModel()
 
@@ -18,6 +21,15 @@ class AdaptiveEngine {
     enum class Phase { ASSESSMENT, LEARNING }
     private var currentPhase = Phase.ASSESSMENT
     private var assessmentResponseString = ""
+
+    var newlyFoundBoundary: Set<String>? = null
+        private set
+
+    fun consumeBoundary(): Set<String>? {
+        val b = newlyFoundBoundary
+        newlyFoundBoundary = null
+        return b
+    }
 
     // ── Operation type ────────────────────────────────────────────────────────
     private var operationType: String = "+"
@@ -39,6 +51,8 @@ class AdaptiveEngine {
 
     /** Set the active operation — resets the engine for that graph */
     fun setOperation(op: String) {
+        Log.i(TAG, "--- STARTING NEW SESSION ---")
+        Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
         operationType = op
         bandit.clearAll()
         cusumDetectors.clear()
@@ -147,12 +161,12 @@ class AdaptiveEngine {
         val answers = assessmentAnswers.getOrPut(kcId) { mutableListOf() }
         answers.add(correct)
 
-        println("[ASSESS KC $kcId] Q${answers.size}: ${if (correct) "✓" else "✗"}")
+        Log.d(TAG, "[ASSESS KC $kcId] Q${answers.size}: ${if (correct) "✓" else "✗"}")
 
         return when {
-            answers.size == 1 && !correct -> { println("[ASSESS KC $kcId] → FAIL (Q1 wrong)"); false }
-            answers.size == 2 && correct  -> { println("[ASSESS KC $kcId] → PASS (Q1+Q2 correct)"); true }
-            answers.size == 2 && !correct -> { println("[ASSESS KC $kcId] → FAIL (Q2 wrong)"); false }
+            answers.size == 1 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q1 wrong)"); false }
+            answers.size == 2 && correct  -> { Log.d(TAG, "[ASSESS KC $kcId] → PASS (Q1+Q2 correct)"); true }
+            answers.size == 2 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q2 wrong)"); false }
             else -> null  // Q1 correct, waiting for Q2
         }
     }
@@ -244,6 +258,7 @@ class AdaptiveEngine {
                 assessmentAnswers.remove(currentKC)
 
                 assessmentResponseString += if (decision) "1" else "0"
+                Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
                 val nextState = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+")
                 if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
@@ -269,7 +284,7 @@ class AdaptiveEngine {
 
         val stat = cusumDetectors[currentKC]?.getStatistic() ?: 0.0
         val prog = cusumDetectors[currentKC]?.getProgress()  ?: 0.0
-        println(
+        Log.d(TAG,
             "[KC $currentKC ${KnowledgeRepository.components[currentKC]?.name}] " +
                     "${if (isCorrect) "✓" else "✗"}  " +
                     "CUSUM=${"%.2f".format(stat)}/${"%.2f".format(beta)} " +
@@ -281,9 +296,11 @@ class AdaptiveEngine {
     }
 
     private fun handleTerminalAssessment(terminal: BoundaryAssessmentEngine.BoundaryState.Terminal) {
-        println("── Assessment Terminal State reached ──")
-        println("  Solvable: ${terminal.solvable}")
-        println("  Boundary: ${terminal.boundary}")
+        Log.i(TAG, "── Assessment Terminal State reached ──")
+        Log.i(TAG, "  Solvable: ${terminal.solvable}")
+        Log.i(TAG, "  Boundary (Current Level): ${terminal.boundary}")
+
+        newlyFoundBoundary = terminal.boundary
 
         for (nodeName in terminal.solvable) {
             val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName]
@@ -308,17 +325,25 @@ class AdaptiveEngine {
         focusKC            = null
         focusQuestionCount = 0
         consecutiveWrong   = 0
-        println("✅ MASTERED KC $kcId: ${KnowledgeRepository.components[kcId]?.name}")
+        Log.i(TAG, "✅ MASTERED KC $kcId: ${KnowledgeRepository.components[kcId]?.name}")
 
         for (ancestors in kcAncestors.values) ancestors.remove(kcId)
 
         val filterIds = activeKCIds()
         val children = KnowledgeRepository.getChildren(kcId)
             .filter { it in filterIds }
+            
+        val unlockedKCs = mutableListOf<Int>()
         for (childKc in children) {
             val remainingAncestors = kcAncestors[childKc]
             if (!remainingAncestors.isNullOrEmpty()) continue
-            if (!student.isMastered(childKc)) addArmIfNeeded(childKc)
+            if (!student.isMastered(childKc)) {
+                addArmIfNeeded(childKc)
+                unlockedKCs.add(childKc)
+            }
+        }
+        if (unlockedKCs.isNotEmpty()) {
+            Log.d(TAG, "Unlocked KCs into ZPD: $unlockedKCs")
         }
 
         for (newKc in KnowledgeRepository.getZPD(student, filterIds)) addArmIfNeeded(newKc)
@@ -347,7 +372,7 @@ class AdaptiveEngine {
         if (!correct) {
             consecutiveWrong++
             if (consecutiveWrong >= frustrationLimit) {
-                println("⚠️ Frustration exit on KC $currentKC after $consecutiveWrong wrong")
+                Log.w(TAG, "⚠️ Frustration exit on KC $currentKC after $consecutiveWrong wrong")
                 focusKC            = null
                 focusQuestionCount = 0
                 consecutiveWrong   = 0

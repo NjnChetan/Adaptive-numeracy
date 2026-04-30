@@ -15,6 +15,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +81,8 @@ class MainActivity : AppCompatActivity() {
         val option3      = panel.findViewById<MaterialButton>(R.id.option3) ?: return
         val option4      = panel.findViewById<MaterialButton>(R.id.option4) ?: return
         val cardBorder   = panel.findViewById<View>(R.id.cardBorder)
+        val btnRow1      = panel.findViewById<View>(R.id.btnRow1)
+        val btnRow2      = panel.findViewById<View>(R.id.btnRow2)
 
         val homeNavHome   = panel.findViewById<View>(R.id.homeNavHome)
         val homeNavRotate = panel.findViewById<View>(R.id.homeNavRotate)
@@ -153,38 +159,82 @@ class MainActivity : AppCompatActivity() {
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
         fun loadQuestion() {
-            cardBorder?.background = normalBorder
-            questionText.setTextColor(Color.parseColor("#1A1A2E"))
-            val (question, answers) = engine.generateQuestion()
-            questionText.text = loc(question)
-            scoreText?.text = "$correct/$total"
-            answerButtons.forEach { it.isEnabled = true }
-            answerButtons.forEachIndexed { i, btn ->
-                val label = loc(answers[i].toString())
-                btn.text = label
-                val digits = answers[i].toString().length
-                val sp = when {
-                    digits >= 5 -> 13f
-                    digits == 4 -> 15f
-                    digits == 3 -> 17f
-                    else        -> 19f
-                }
-                btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
-                btn.setOnClickListener {
-                    answerButtons.forEach { it.isEnabled = false }
-                    val ok = answers[i] == engine.correctAnswer
-                    engine.submitAnswer(answers[i])
-                    total++
-                    if (ok) {
-                        correct++
-                        cardBorder?.background = correctBorder
-                    } else {
-                        cardBorder?.background = wrongBorder
-                        questionText.text = loc(engine.correctAnswer.toString())
-                        questionText.setTextColor(Color.parseColor("#C62828"))
+            // Disable answer buttons while generating to prevent double-taps
+            answerButtons.forEach { it.isEnabled = false }
+
+            lifecycleScope.launch {
+                // --- Heavy work on background thread ---
+                val boundary = engine.consumeBoundary()
+
+                if (boundary != null) {
+                    // Show boundary message on UI thread
+                    withContext(Dispatchers.Main) {
+                        btnRow1?.visibility = View.GONE
+                        btnRow2?.visibility = View.GONE
+                        cardBorder?.background = normalBorder
+                        val msg = "\n\nPreparing practice..."
+                        questionText.setTextColor(Color.parseColor("#2B3A8C"))
+                        questionText.text = loc(msg)
                     }
+                    // Wait 4 s then load next question (still on bg thread delay via coroutine)
+                    kotlinx.coroutines.delay(4000)
+                    withContext(Dispatchers.Main) {
+                        btnRow1?.visibility = View.VISIBLE
+                        btnRow2?.visibility = View.VISIBLE
+                    }
+                    loadQuestion()
+                    return@launch
+                }
+
+                // generateQuestion() may spin in do-while loops — run on Default dispatcher
+                val (question, answers) = withContext(Dispatchers.Default) {
+                    engine.generateQuestion()
+                }
+
+                // --- Back on Main thread to update UI ---
+                withContext(Dispatchers.Main) {
+                    cardBorder?.background = normalBorder
+                    questionText.setTextColor(Color.parseColor("#1A1A2E"))
+                    questionText.text = loc(question)
                     scoreText?.text = "$correct/$total"
-                    questionText.postDelayed({ loadQuestion() }, 900)
+
+                    answerButtons.forEachIndexed { i, btn ->
+                        val label = loc(answers[i].toString())
+                        btn.text = label
+                        val digits = answers[i].toString().length
+                        val sp = when {
+                            digits >= 5 -> 13f
+                            digits == 4 -> 15f
+                            digits == 3 -> 17f
+                            else        -> 19f
+                        }
+                        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+                        btn.isEnabled = true
+                        btn.setOnClickListener {
+                            answerButtons.forEach { it.isEnabled = false }
+                            val ok = answers[i] == engine.correctAnswer
+                            lifecycleScope.launch {
+                                // submitAnswer also calls KL-UCB / CUSUM — offload it
+                                withContext(Dispatchers.Default) {
+                                    engine.submitAnswer(answers[i])
+                                }
+                                withContext(Dispatchers.Main) {
+                                    total++
+                                    if (ok) {
+                                        correct++
+                                        cardBorder?.background = correctBorder
+                                    } else {
+                                        cardBorder?.background = wrongBorder
+                                        questionText.text = loc(engine.correctAnswer.toString())
+                                        questionText.setTextColor(Color.parseColor("#C62828"))
+                                    }
+                                    scoreText?.text = "$correct/$total"
+                                }
+                                kotlinx.coroutines.delay(900)
+                                loadQuestion()
+                            }
+                        }
+                    }
                 }
             }
         }
