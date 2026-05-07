@@ -159,24 +159,33 @@ class MainActivity : AppCompatActivity() {
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
         fun loadQuestion() {
-            // Disable answer buttons while generating to prevent double-taps
             answerButtons.forEach { it.isEnabled = false }
 
             lifecycleScope.launch {
-                // --- Heavy work on background thread ---
-                val boundary = engine.consumeBoundary()
 
-                if (boundary != null) {
-                    // Show boundary message on UI thread
+                // ── All mastered (modes 1 & 2) ────────────────────────────────
+                if (engine.consumeAllMastered()) {
                     withContext(Dispatchers.Main) {
                         btnRow1?.visibility = View.GONE
                         btnRow2?.visibility = View.GONE
                         cardBorder?.background = normalBorder
-                        val msg = "\n\nPreparing practice..."
                         questionText.setTextColor(Color.parseColor("#2B3A8C"))
-                        questionText.text = loc(msg)
+                        questionText.text = loc(" Mastered!")
                     }
-                    // Wait 4 s then load next question (still on bg thread delay via coroutine)
+                    return@launch
+                }
+
+                // ── Boundary / ZPD found (modes 2 & 3) ───────────────────────
+                val boundary = engine.consumeBoundary()
+
+                if (boundary != null) {
+                    withContext(Dispatchers.Main) {
+                        btnRow1?.visibility = View.GONE
+                        btnRow2?.visibility = View.GONE
+                        cardBorder?.background = normalBorder
+                        questionText.setTextColor(Color.parseColor("#2B3A8C"))
+                        questionText.text = loc("\n\nPreparing practice...")
+                    }
                     kotlinx.coroutines.delay(4000)
                     withContext(Dispatchers.Main) {
                         btnRow1?.visibility = View.VISIBLE
@@ -186,12 +195,11 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // generateQuestion() may spin in do-while loops — run on Default dispatcher
+                // ── Generate next question ────────────────────────────────────
                 val (question, answers) = withContext(Dispatchers.Default) {
                     engine.generateQuestion()
                 }
 
-                // --- Back on Main thread to update UI ---
                 withContext(Dispatchers.Main) {
                     cardBorder?.background = normalBorder
                     questionText.setTextColor(Color.parseColor("#1A1A2E"))
@@ -214,7 +222,6 @@ class MainActivity : AppCompatActivity() {
                             answerButtons.forEach { it.isEnabled = false }
                             val ok = answers[i] == engine.correctAnswer
                             lifecycleScope.launch {
-                                // submitAnswer also calls KL-UCB / CUSUM — offload it
                                 withContext(Dispatchers.Default) {
                                     engine.submitAnswer(answers[i])
                                 }

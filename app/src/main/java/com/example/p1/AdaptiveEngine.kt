@@ -31,25 +31,29 @@ class AdaptiveEngine {
         return b
     }
 
+    // ── All-mastered signal (modes 1 & 2) ────────────────────────────────────
+    var newlyAllMastered: Boolean = false
+        private set
+
+    fun consumeAllMastered(): Boolean {
+        val v = newlyAllMastered
+        newlyAllMastered = false
+        return v
+    }
+
+    // ── Mode 2: show "Preparing practice" after first answer ─────────────────
+    private var mode2ReadyToShowPractice: Boolean = false
+
     // ── Operation type ────────────────────────────────────────────────────────
     private var operationType: String = "+"
 
     // ── Digit mode ────────────────────────────────────────────────────────────
-    // 1 = 1-digit only (KCs 1-2 / 10-11), skip assessment, straight to learning
-    // 2 = up to 2-digit (KCs 1-6 / 10-15), skip assessment
-    // 3 = full graph + boundary assessment (default)
     private var digitMode: Int = 3
 
-    /**
-     * Set digit mode — call this before setOperation.
-     * Modes 1/2 skip boundary assessment and go straight to learning.
-     * Mode 3 runs the full boundary assessment first.
-     */
     fun applyDigitMode(mode: Int) {
         digitMode = mode
     }
 
-    /** Set the active operation — resets the engine for that graph */
     fun setOperation(op: String) {
         Log.i(TAG, "--- STARTING NEW SESSION ---")
         Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
@@ -60,16 +64,15 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        // Mode 3 = full assessment; modes 1/2 skip straight to learning
         currentPhase = if (digitMode == 3) Phase.ASSESSMENT else Phase.LEARNING
         assessmentResponseString = ""
         student.reset()
         assessmentAnswers.clear()
         assessmentNodeDecided = false
         initZPD()
+        mode2ReadyToShowPractice = (digitMode == 2)
     }
 
-    /** Returns the KC IDs allowed for current operation + digit mode */
     private fun activeKCIds(): List<Int> {
         val base = if (operationType == "-") KnowledgeRepository.subtractionIds
         else KnowledgeRepository.additionIds
@@ -94,8 +97,6 @@ class AdaptiveEngine {
         private set
 
     // ── Assessment state ──────────────────────────────────────────────────────
-    // assessmentAnswers: per-node list of correct/wrong (max 2 entries)
-    // assessmentNodeDecided: true once verdict reached, waiting for next generateQuestion
     private val assessmentAnswers = mutableMapOf<Int, MutableList<Boolean>>()
     private var assessmentNodeDecided = false
 
@@ -150,13 +151,6 @@ class AdaptiveEngine {
     // ─────────────────────────────────────────────────────────────────────────
     // 2-question assessment rule
     // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * 2-question assessment rule:
-     *   Q1 wrong → FAIL immediately
-     *   Q1 right, Q2 right → PASS
-     *   Q1 right, Q2 wrong → FAIL
-     */
     private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
         val answers = assessmentAnswers.getOrPut(kcId) { mutableListOf() }
         answers.add(correct)
@@ -167,7 +161,7 @@ class AdaptiveEngine {
             answers.size == 1 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q1 wrong)"); false }
             answers.size == 2 && correct  -> { Log.d(TAG, "[ASSESS KC $kcId] → PASS (Q1+Q2 correct)"); true }
             answers.size == 2 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q2 wrong)"); false }
-            else -> null  // Q1 correct, waiting for Q2
+            else -> null
         }
     }
 
@@ -183,7 +177,6 @@ class AdaptiveEngine {
     }
 
     private fun generateLearningQuestion(): Pair<String, List<Int>> {
-
         val filterIds = activeKCIds()
         val zpd = KnowledgeRepository.getZPD(student, filterIds)
 
@@ -271,6 +264,13 @@ class AdaptiveEngine {
         }
 
         // ── LEARNING phase ────────────────────────────────────────────────────
+
+        // Mode 2: after first answer, signal "Preparing practice"
+        if (mode2ReadyToShowPractice) {
+            mode2ReadyToShowPractice = false
+            newlyFoundBoundary = setOf()
+        }
+
         bandit.update(currentKC, isCorrect)
         student.bktUpdateBelief(currentKC, isCorrect)
 
@@ -332,7 +332,7 @@ class AdaptiveEngine {
         val filterIds = activeKCIds()
         val children = KnowledgeRepository.getChildren(kcId)
             .filter { it in filterIds }
-            
+
         val unlockedKCs = mutableListOf<Int>()
         for (childKc in children) {
             val remainingAncestors = kcAncestors[childKc]
@@ -347,6 +347,11 @@ class AdaptiveEngine {
         }
 
         for (newKc in KnowledgeRepository.getZPD(student, filterIds)) addArmIfNeeded(newKc)
+
+        if ((digitMode == 1 || digitMode == 2) &&
+            filterIds.all { student.isMastered(it) }) {
+            newlyAllMastered = true
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
