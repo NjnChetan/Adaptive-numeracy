@@ -23,9 +23,11 @@ import androidx.lifecycle.lifecycleScope
 class MainActivity : AppCompatActivity() {
 
     private val engines = List(4) { AdaptiveEngine() }
+    private lateinit var sessionLogger: SessionLogger
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sessionLogger = SessionLogger(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
@@ -48,6 +50,11 @@ class MainActivity : AppCompatActivity() {
         setupPanel(R.id.panel2, R.id.clip2, engines[1])
         setupPanel(R.id.panel3, R.id.clip3, engines[2])
         setupPanel(R.id.panel4, R.id.clip4, engines[3])
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        sessionLogger.endSession()
     }
 
     private fun ssp(ratio: Float, visW: Int, visH: Int): Float =
@@ -115,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         var selectedOp: String? = null
+        var selectedDigitMode: Int = 3
         var correct = 0
         var total   = 0
         var isMarathi = false
@@ -129,6 +137,7 @@ class MainActivity : AppCompatActivity() {
 
         fun selectDigit(mode: Int) {
             engine.applyDigitMode(mode)
+            selectedDigitMode = mode
             selectedOp = null
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             startBtn.isEnabled = false
@@ -158,35 +167,44 @@ class MainActivity : AppCompatActivity() {
         btnMul.setOnClickListener { selectOp(btnMul, "×") }
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
+        fun showMastered() {
+            btnRow1?.visibility = View.GONE
+            btnRow2?.visibility = View.GONE
+            cardBorder?.background = normalBorder
+            questionText.setTextColor(Color.parseColor("#2B3A8C"))
+            questionText.text = loc(" Mastered!")
+        }
+
         fun loadQuestion() {
             answerButtons.forEach { it.isEnabled = false }
 
             lifecycleScope.launch {
 
-                // ── All mastered (modes 1 & 2) ────────────────────────────────
+                // ── All mastered ────────────────────────────────────────────
                 if (engine.consumeAllMastered()) {
-                    withContext(Dispatchers.Main) {
-                        btnRow1?.visibility = View.GONE
-                        btnRow2?.visibility = View.GONE
-                        cardBorder?.background = normalBorder
-                        questionText.setTextColor(Color.parseColor("#2B3A8C"))
-                        questionText.text = loc(" Mastered!")
-                    }
+                    withContext(Dispatchers.Main) { showMastered() }
                     return@launch
                 }
 
-                // ── Boundary / ZPD found (modes 2 & 3) ───────────────────────
+                // ── Boundary found → "Practice Starts" alert ───────────────
                 val boundary = engine.consumeBoundary()
 
                 if (boundary != null) {
+                    // Log K-BOUNDARY
+                    sessionLogger.logKBoundary(boundary.toList())
+
+                    if (engine.consumeAllMastered()) {
+                        withContext(Dispatchers.Main) { showMastered() }
+                        return@launch
+                    }
                     withContext(Dispatchers.Main) {
                         btnRow1?.visibility = View.GONE
                         btnRow2?.visibility = View.GONE
                         cardBorder?.background = normalBorder
                         questionText.setTextColor(Color.parseColor("#2B3A8C"))
-                        questionText.text = loc("\n\nPreparing practice...")
+                        questionText.text = loc("\n\nPractice Starts")
                     }
-                    kotlinx.coroutines.delay(4000)
+                    kotlinx.coroutines.delay(5000)
                     withContext(Dispatchers.Main) {
                         btnRow1?.visibility = View.VISIBLE
                         btnRow2?.visibility = View.VISIBLE
@@ -195,9 +213,14 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // ── Generate next question ────────────────────────────────────
+                // ── Generate next question ─────────────────────────────────
                 val (question, answers) = withContext(Dispatchers.Default) {
                     engine.generateQuestion()
+                }
+
+                if (engine.consumeAllMastered()) {
+                    withContext(Dispatchers.Main) { showMastered() }
+                    return@launch
                 }
 
                 withContext(Dispatchers.Main) {
@@ -221,9 +244,50 @@ class MainActivity : AppCompatActivity() {
                         btn.setOnClickListener {
                             answerButtons.forEach { it.isEnabled = false }
                             val ok = answers[i] == engine.correctAnswer
+                            // Capture question metadata before submitAnswer
+                            val qKCName = engine.currentKCName
+                            val qKCId = engine.currentKCId
+                            val qText = engine.lastQuestionText
+                            val qCorrectAns = engine.correctAnswer
+                            val qNum1 = engine.lastNum1
+                            val qNum2 = engine.lastNum2
+                            val isAssessment = engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT
+                            val qNo = if (isAssessment) engine.detectionQuestionNo else engine.practiceQuestionNo
+
                             lifecycleScope.launch {
                                 withContext(Dispatchers.Default) {
                                     engine.submitAnswer(answers[i])
+                                }
+
+                                // CSV logging
+                                val misconception = if (!ok) {
+                                    DistractorGenerator.getMisconception(qKCId, qNum1, qNum2, qCorrectAns, answers[i])
+                                } else ""
+
+                                if (isAssessment) {
+                                    sessionLogger.logDetection(qNo, qKCName, qText, qCorrectAns, answers[i], ok, misconception)
+                                } else {
+                                    sessionLogger.logPractice(qNo, qKCName, qText, qCorrectAns, answers[i], ok, misconception)
+                                }
+
+                                // Check mastery event
+                                engine.consumeMasteryEvent()?.let { evt ->
+                                    sessionLogger.logMastery(qNo, evt.conceptName, evt.correctnessRecord)
+                                }
+                                // Check ZPD update event
+                                engine.consumeZpdUpdate()?.let { added ->
+                                    sessionLogger.logZpdUpdate(added)
+                                }
+
+                                // Check if all mastered
+                                if (engine.consumeAllMastered()) {
+                                    withContext(Dispatchers.Main) {
+                                        total++
+                                        if (ok) correct++
+                                        scoreText?.text = "$correct/$total"
+                                        showMastered()
+                                    }
+                                    return@launch
                                 }
                                 withContext(Dispatchers.Main) {
                                     total++
@@ -248,6 +312,17 @@ class MainActivity : AppCompatActivity() {
 
         startBtn.setOnClickListener {
             if (selectedOp == null) return@setOnClickListener
+            // Start CSV logging session
+            sessionLogger.startSession()
+            val lang = if (isMarathi) "Marathi" else "English"
+            val opName = when (selectedOp) {
+                "+" -> "Addition"; "-" -> "Subtraction"
+                "×" -> "Multiplication"; "÷" -> "Division"
+                else -> selectedOp ?: ""
+            }
+            sessionLogger.logSettings(lang, opName, selectedDigitMode)
+
+            correct = 0; total = 0
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
             loadQuestion()
@@ -258,6 +333,7 @@ class MainActivity : AppCompatActivity() {
             digitLayout.visibility = View.VISIBLE
         }
         navHome?.setOnClickListener {
+            sessionLogger.endSession()
             quizLayout.visibility = View.GONE
             homeLayout.visibility = View.VISIBLE
         }

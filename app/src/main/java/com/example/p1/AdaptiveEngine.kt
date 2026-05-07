@@ -7,6 +7,8 @@ class AdaptiveEngine {
 
     private val TAG = "AdaptiveSystem"
 
+
+
     val student = StudentModel()
 
     private val fpr  = 0.00009
@@ -19,7 +21,8 @@ class AdaptiveEngine {
 
     // ── Phase tracking ────────────────────────────────────────────────────────
     enum class Phase { ASSESSMENT, LEARNING }
-    private var currentPhase = Phase.ASSESSMENT
+    var currentPhase = Phase.ASSESSMENT
+        private set
     private var assessmentResponseString = ""
 
     var newlyFoundBoundary: Set<String>? = null
@@ -41,8 +44,15 @@ class AdaptiveEngine {
         return v
     }
 
-    // ── Mode 2: show "Preparing practice" after first answer ─────────────────
-    private var mode2ReadyToShowPractice: Boolean = false
+    // ── Mastery event (for CSV logging) ────────────────────────────────
+    data class MasteryEvent(val kcId: Int, val conceptName: String, val correctnessRecord: List<Boolean>)
+    var lastMasteryEvent: MasteryEvent? = null; private set
+    fun consumeMasteryEvent(): MasteryEvent? { val e = lastMasteryEvent; lastMasteryEvent = null; return e }
+
+    // ── ZPD-update event (for CSV logging) ─────────────────────────────
+    var lastZpdUpdate: List<String>? = null; private set
+    fun consumeZpdUpdate(): List<String>? { val e = lastZpdUpdate; lastZpdUpdate = null; return e }
+
 
     // ── Operation type ────────────────────────────────────────────────────────
     private var operationType: String = "+"
@@ -61,16 +71,18 @@ class AdaptiveEngine {
         bandit.clearAll()
         cusumDetectors.clear()
         ts = 0
+        detectionQuestionNo = 0
+        practiceQuestionNo = 0
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        currentPhase = if (digitMode == 3) Phase.ASSESSMENT else Phase.LEARNING
+        currentPhase = if (digitMode >= 2) Phase.ASSESSMENT else Phase.LEARNING
         assessmentResponseString = ""
         student.reset()
         assessmentAnswers.clear()
         assessmentNodeDecided = false
         initZPD()
-        mode2ReadyToShowPractice = (digitMode == 2)
+
     }
 
     private fun activeKCIds(): List<Int> {
@@ -96,7 +108,16 @@ class AdaptiveEngine {
     var correctAnswer: Int = 0
         private set
 
-    // ── Assessment state ──────────────────────────────────────────────────────
+    // ── Exposed question metadata for CSV logging ─────────────────────────
+    var lastNum1: Int = 0; private set
+    var lastNum2: Int = 0; private set
+    var lastQuestionText: String = ""; private set
+    val currentKCName: String get() = BoundaryAssessmentEngine.ID_TO_NODE[currentKC] ?: "$currentKC"
+    val currentKCId: Int get() = currentKC
+    var detectionQuestionNo: Int = 0; private set
+    var practiceQuestionNo: Int = 0; private set
+
+    // ── Assessment state ──────────────────────────────────────────────────
     private val assessmentAnswers = mutableMapOf<Int, MutableList<Boolean>>()
     private var assessmentNodeDecided = false
 
@@ -106,6 +127,12 @@ class AdaptiveEngine {
         kcAncestors.clear()
         val filterIds = activeKCIds()
         val initZpd = KnowledgeRepository.getZPD(student, filterIds)
+
+        Log.i(TAG, "── initZPD() ──")
+        Log.i(TAG, "  filterIds = $filterIds")
+        Log.i(TAG, "  mastered  = ${filterIds.filter { student.isMastered(it) }.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
+        Log.i(TAG, "  ZPD       = ${initZpd.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
+
 
         val reachable = mutableSetOf<Int>()
         val seed = ArrayDeque(initZpd)
@@ -180,7 +207,19 @@ class AdaptiveEngine {
         val filterIds = activeKCIds()
         val zpd = KnowledgeRepository.getZPD(student, filterIds)
 
+        Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it})" }}")
+        Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+
+
         for (kcId in zpd) addArmIfNeeded(kcId)
+
+        // If ZPD is empty, all eligible KCs are mastered → signal completion
+        if (zpd.isEmpty()) {
+            if (filterIds.all { student.isMastered(it) }) {
+                Log.i(TAG, "🎓 All KCs mastered! filterIds=$filterIds")
+                newlyAllMastered = true
+            }
+        }
 
         currentKC = if (zpd.isEmpty()) {
             if (filterIds.isNotEmpty()) filterIds.last() else 1
@@ -188,12 +227,15 @@ class AdaptiveEngine {
             chooseKC(zpd)
         }
 
+        practiceQuestionNo++
         val (num1, num2) = generateNumbersForKC(currentKC)
+        lastNum1 = num1; lastNum2 = num2
         val op = KnowledgeRepository.getOperationType(currentKC)
         correctAnswer = if (op == "-") num1 - num2 else num1 + num2
 
         val opSymbol = if (op == "-") "−" else "+"
         val question = "$num1 $opSymbol $num2 = ?"
+        lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
 
         val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
         val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -202,18 +244,23 @@ class AdaptiveEngine {
     }
 
     private fun generateAssessmentQuestion(): Pair<String, List<Int>> =
-        when (val state = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+")) {
+        when (val state = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+", isLevel2 = digitMode == 2)) {
             is BoundaryAssessmentEngine.BoundaryState.Ask -> {
                 val kcId = BoundaryAssessmentEngine.NODE_TO_ID[state.nodeName] ?: 1
                 currentKC = kcId
                 assessmentNodeDecided = false
+                Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${state.nodeName}) | path='$assessmentResponseString'")
 
+
+                detectionQuestionNo++
                 val (num1, num2) = generateNumbersForKC(currentKC)
+                lastNum1 = num1; lastNum2 = num2
                 val op = KnowledgeRepository.getOperationType(currentKC)
                 correctAnswer = if (op == "-") num1 - num2 else num1 + num2
 
                 val opSymbol = if (op == "-") "−" else "+"
                 val question = "$num1 $opSymbol $num2 = ?"
+                lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
 
                 val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
                 val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -253,7 +300,8 @@ class AdaptiveEngine {
                 assessmentResponseString += if (decision) "1" else "0"
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
-                val nextState = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+")
+
+                val nextState = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+", isLevel2 = digitMode == 2)
                 if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
                     handleTerminalAssessment(nextState)
                     currentPhase = Phase.LEARNING
@@ -264,12 +312,6 @@ class AdaptiveEngine {
         }
 
         // ── LEARNING phase ────────────────────────────────────────────────────
-
-        // Mode 2: after first answer, signal "Preparing practice"
-        if (mode2ReadyToShowPractice) {
-            mode2ReadyToShowPractice = false
-            newlyFoundBoundary = setOf()
-        }
 
         bandit.update(currentKC, isCorrect)
         student.bktUpdateBelief(currentKC, isCorrect)
@@ -292,6 +334,7 @@ class AdaptiveEngine {
                     "focus_q=$focusQuestionCount  consecutive_wrong=$consecutiveWrong"
         )
 
+
         return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
     }
 
@@ -313,12 +356,25 @@ class AdaptiveEngine {
 
         currentPhase = Phase.LEARNING
         initZPD()
+
+        // If the assessment itself proved all KCs are mastered, signal immediately
+        val filterIds = activeKCIds()
+        if (filterIds.all { student.isMastered(it) }) {
+            Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
+            newlyAllMastered = true
+
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // onMastery
     // ─────────────────────────────────────────────────────────────────────────
     private fun onMastery(kcId: Int) {
+        // Save correctness record before removing detector
+        val record = cusumDetectors[kcId]?.correctnessRecord?.toList() ?: emptyList()
+        val conceptName = BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: "$kcId"
+        lastMasteryEvent = MasteryEvent(kcId, conceptName, record)
+
         student.setMastered(kcId)
         bandit.removeArm(kcId)
         cusumDetectors.remove(kcId)
@@ -326,6 +382,7 @@ class AdaptiveEngine {
         focusQuestionCount = 0
         consecutiveWrong   = 0
         Log.i(TAG, "✅ MASTERED KC $kcId: ${KnowledgeRepository.components[kcId]?.name}")
+        Log.i(TAG, "  $conceptName mastered")
 
         for (ancestors in kcAncestors.values) ancestors.remove(kcId)
 
@@ -335,22 +392,39 @@ class AdaptiveEngine {
 
         val unlockedKCs = mutableListOf<Int>()
         for (childKc in children) {
-            val remainingAncestors = kcAncestors[childKc]
-            if (!remainingAncestors.isNullOrEmpty()) continue
+            // Only check prerequisites within the current digit mode's scope
+            val prereqs = KnowledgeRepository.getPrerequisites(childKc)
+                .filter { it in filterIds }
+            val allPrereqsMet = prereqs.all { student.isMastered(it) }
+            if (!allPrereqsMet) {
+                Log.d(TAG, "  KC $childKc (${BoundaryAssessmentEngine.ID_TO_NODE[childKc]}) still locked: " +
+                    "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+                continue
+            }
             if (!student.isMastered(childKc)) {
                 addArmIfNeeded(childKc)
                 unlockedKCs.add(childKc)
             }
         }
         if (unlockedKCs.isNotEmpty()) {
-            Log.d(TAG, "Unlocked KCs into ZPD: $unlockedKCs")
+            Log.d(TAG, "Unlocked KCs into ZPD: ${unlockedKCs.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it]})" }}")
+            lastZpdUpdate = unlockedKCs.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
         }
 
-        for (newKc in KnowledgeRepository.getZPD(student, filterIds)) addArmIfNeeded(newKc)
+        // Recompute ZPD from ground truth to ensure correctness
+        val newZpd = KnowledgeRepository.getZPD(student, filterIds)
+        for (newKc in newZpd) addArmIfNeeded(newKc)
 
-        if ((digitMode == 1 || digitMode == 2) &&
-            filterIds.all { student.isMastered(it) }) {
+        Log.i(TAG, "  After mastery of ${BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: kcId}:")
+        Log.i(TAG, "  New ZPD = ${newZpd.map { "${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it}" }}")
+        Log.i(TAG, "  Mastered so far: ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+
+
+        // Check if all KCs in the current digit mode are mastered
+        if (filterIds.all { student.isMastered(it) }) {
+            Log.i(TAG, "🎓 ALL KCs MASTERED for digitMode=$digitMode!")
             newlyAllMastered = true
+
         }
     }
 
@@ -364,13 +438,42 @@ class AdaptiveEngine {
             bandit.hasArm(focus) &&
             focusQuestionCount < minFocus) {
             focusQuestionCount++
+            logUCBValues(zpd, focus)
             return focus
         }
         val selected       = bandit.selectConcept(zpd)
         focusKC            = selected
         focusQuestionCount = 1
         consecutiveWrong   = 0
+        logUCBValues(zpd, selected)
         return selected
+    }
+
+    private fun logUCBValues(zpd: List<Int>, selected: Int) {
+        // Compute UCB for all active arms before logging
+        val activeNodes = zpd.filter { bandit.hasArm(it) }
+        val nt = activeNodes.sumOf { bandit.getNode(it)?.timesPlayed ?: 0 }.coerceAtLeast(2)
+        for (kcId in activeNodes) {
+            val node = bandit.getNode(kcId)
+            if (node != null && node.timesPlayed > 0) {
+                node.computeUCB(nt)
+            }
+        }
+
+        Log.i(TAG, "Qno: $practiceQuestionNo")
+        for (kcId in zpd) {
+            val node = bandit.getNode(kcId)
+            val name = BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: "$kcId"
+            if (node != null) {
+                val mean = node.estimate.coerceIn(0.0, 1.0)
+                val ucb = node.ucb.coerceIn(0.0, 1.0)
+                Log.i(TAG, "  $name  mean: ${"%.2f".format(mean)}  ucb: ${"%.2f".format(ucb)}")
+            } else {
+                Log.i(TAG, "  $name  mean: 0.00  ucb: 0.00 (no arm)")
+            }
+        }
+        val selName = BoundaryAssessmentEngine.ID_TO_NODE[selected] ?: "$selected"
+        Log.i(TAG, "Concept-selected: $selName")
     }
 
     private fun updateFocusTracking(correct: Boolean) {
@@ -390,6 +493,8 @@ class AdaptiveEngine {
     // ─────────────────────────────────────────────────────────────────────────
     // Problem generation
     // ─────────────────────────────────────────────────────────────────────────
+    private val MAX_GEN_ATTEMPTS = 10_000
+
     private fun generateNumbersForKC(kcId: Int): Pair<Int, Int> {
 
         fun nDigit(n: Int): Int {
@@ -399,27 +504,30 @@ class AdaptiveEngine {
         }
 
         fun hasCarry(a: Int, b: Int): Boolean {
-            var x = a; var y = b
+            var x = a; var y = b; var carry = 0
             while (x > 0 || y > 0) {
-                if ((x % 10) + (y % 10) >= 10) return true
+                if ((x % 10) + (y % 10) + carry >= 10) return true
+                carry = 0
                 x /= 10; y /= 10
             }
             return false
         }
 
         fun carryCount(a: Int, b: Int): Int {
-            var x = a; var y = b; var c = 0
+            var x = a; var y = b; var c = 0; var carry = 0
             while (x > 0 || y > 0) {
-                if ((x % 10) + (y % 10) >= 10) c++
+                val colSum = (x % 10) + (y % 10) + carry
+                if (colSum >= 10) { c++; carry = 1 } else { carry = 0 }
                 x /= 10; y /= 10
             }
             return c
         }
 
         fun hasBorrow(a: Int, b: Int): Boolean {
-            var x = a; var y = b
+            var x = a; var y = b; var borrow = 0
             while (x > 0 || y > 0) {
-                if ((x % 10) < (y % 10)) return true
+                if ((x % 10) - borrow < (y % 10)) return true
+                borrow = 0
                 x /= 10; y /= 10
             }
             return false
@@ -436,24 +544,41 @@ class AdaptiveEngine {
             return c
         }
 
+        /**
+         * Safely generates a pair matching [predicate], falling back to the
+         * last-generated pair after MAX_GEN_ATTEMPTS to prevent infinite loops.
+         */
+        fun safePair(gen: () -> Pair<Int, Int>, predicate: (Int, Int) -> Boolean): Pair<Int, Int> {
+            var a: Int; var b: Int; var attempts = 0
+            do {
+                val (ga, gb) = gen()
+                a = ga; b = gb
+                if (++attempts >= MAX_GEN_ATTEMPTS) {
+                    Log.w(TAG, "⚠️ generateNumbersForKC: gave up after $MAX_GEN_ATTEMPTS attempts for kcId (returning last pair $a,$b)")
+                    return Pair(a, b)
+                }
+            } while (!predicate(a, b))
+            return Pair(a, b)
+        }
+
         return when (kcId) {
-            1  -> { var a: Int; var b: Int; do { a = (1..9).random(); b = (1..9).random() } while (a + b >= 10); Pair(a, b) }
-            2  -> { var a: Int; var b: Int; do { a = (1..9).random(); b = (1..9).random() } while (a + b < 10); Pair(a, b) }
-            3  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (hasCarry(a, b)); Pair(a, b) }
-            4  -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (!hasCarry(a, b)); Pair(a, b) }
-            5  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasCarry(a, b)); Pair(a, b) }
-            6  -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (carryCount(a, b) != 2); Pair(a, b) }
-            7  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (hasCarry(a, b)); Pair(a, b) }
-            8  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(2) } while (carryCount(a, b) != 1); Pair(a, b) }
-            9  -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (carryCount(a, b) < 2); Pair(a, b) }
-            10 -> { var a: Int; var b: Int; do { a = (2..9).random(); b = (1..9).random() } while (b >= a); Pair(a, b) }
-            11 -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (hasBorrow(a, b)); Pair(a, b) }
-            12 -> { var a: Int; var b: Int; do { a = nDigit(2); b = (1..9).random() } while (!hasBorrow(a, b) || a - b < 1); Pair(a, b) }
-            13 -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (hasBorrow(a, b) || a <= b); Pair(a, b) }
-            14 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (hasBorrow(a, b) || a <= b); Pair(a, b) }
-            15 -> { var a: Int; var b: Int; do { a = nDigit(2); b = nDigit(2) } while (!hasBorrow(a, b) || a <= b); Pair(a, b) }
-            16 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) != 1 || a <= b); Pair(a, b) }
-            17 -> { var a: Int; var b: Int; do { a = nDigit(3); b = nDigit(3) } while (borrowCount(a, b) < 2 || a <= b); Pair(a, b) }
+            1  -> safePair({ Pair((1..9).random(), (1..9).random()) }) { a, b -> a + b < 10 }
+            2  -> safePair({ Pair((1..9).random(), (1..9).random()) }) { a, b -> a + b >= 10 }
+            3  -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> !hasCarry(a, b) }
+            4  -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> hasCarry(a, b) }
+            5  -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> !hasCarry(a, b) }
+            6  -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> carryCount(a, b) == 2 }
+            7  -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> !hasCarry(a, b) }
+            8  -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b -> carryCount(a, b) == 1 }
+            9  -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> carryCount(a, b) >= 2 }
+            10 -> safePair({ Pair((2..9).random(), (1..9).random()) }) { a, b -> b < a }
+            11 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> !hasBorrow(a, b) }
+            12 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> hasBorrow(a, b) && a - b >= 1 }
+            13 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> !hasBorrow(a, b) && a > b }
+            14 -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> !hasBorrow(a, b) && a > b }
+            15 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> hasBorrow(a, b) && a > b }
+            16 -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> borrowCount(a, b) == 1 && a > b }
+            17 -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> borrowCount(a, b) >= 2 && a > b }
             else -> Pair(1, 1)
         }
     }

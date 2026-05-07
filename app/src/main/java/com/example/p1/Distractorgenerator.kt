@@ -128,4 +128,59 @@ object DistractorGenerator {
 
         return result.filter { it >= 0 && it != correct }
     }
+
+    /**
+     * Identifies the misconception behind a wrong answer.
+     * Returns a human-readable label for the CSV log.
+     */
+    fun getMisconception(kcId: Int, num1: Int, num2: Int, correctAnswer: Int, selectedAnswer: Int): String {
+        if (selectedAnswer == correctAnswer) return ""
+
+        val diff = selectedAnswer - correctAnswer
+        val op = KnowledgeRepository.getOperationType(kcId)
+
+        // Check: did the student add instead of subtract (or vice versa)?
+        if (op == "-" && selectedAnswer == num1 + num2) return "Add-instead-of-subtract"
+        if (op == "+" && selectedAnswer == num1 - num2) return "Subtract-instead-of-add"
+
+        // Check: off-by-one error
+        if (diff == 1 || diff == -1) return "Off-by-one"
+        if (diff == 2 || diff == -2) return "Off-by-two"
+
+        // Check: borrow/carry confusion (off by 10 at some place)
+        val absDiff = kotlin.math.abs(diff)
+        if (absDiff == 10 || absDiff == 100) return "Carry/Borrow-error"
+
+        // Check: wrong place value — digit-level off by a power of 10
+        val correctStr = correctAnswer.toString()
+        val selectedStr = selectedAnswer.toString()
+        if (correctStr.length == selectedStr.length) {
+            var digitDiffs = 0
+            for (i in correctStr.indices) {
+                if (correctStr[i] != selectedStr[i]) digitDiffs++
+            }
+            if (digitDiffs == 1) return "Single-digit-error"
+        }
+
+        // Check: forgot borrow (subtraction KCs with borrow)
+        if (kcId in listOf(12, 15, 16, 17)) {
+            val s1 = num1.toString().padStart(3, '0')
+            val s2 = num2.toString().padStart(3, '0')
+            var noBorrow = 0
+            for (i in s1.indices) {
+                val d1 = s1[i].digitToInt()
+                val d2 = s2[i].digitToInt()
+                val d = if (d1 >= d2) d1 - d2 else d2 - d1
+                noBorrow = noBorrow * 10 + d
+            }
+            if (selectedAnswer == noBorrow) return "Forgot-borrow"
+        }
+
+        // Check: forgot carry (addition KCs with carry)
+        if (kcId in listOf(2, 4, 6, 8, 9)) {
+            if (diff == -10 || diff == -100) return "Forgot-carry"
+        }
+
+        return "Other-error"
+    }
 }

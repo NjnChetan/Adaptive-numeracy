@@ -18,6 +18,7 @@ class StudentModel {
 
     fun setMastered(kcId: Int) {
         kcStates[kcId] = KCState.LEARNED
+        bktBelief[kcId] = 1.0
     }
 
     fun reset() {

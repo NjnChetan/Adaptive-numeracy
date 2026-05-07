@@ -227,11 +227,130 @@ object BoundaryAssessmentEngine {
         )
     )
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // LEVEL 2 ADDITION ASSESSMENT (2-digit mode)
+    // Order: Q1 = 1AC (1-digit with carry)
+    //        Q2 = 2A2 (2-digit + 2-digit, no carry)
+    //        Q3 = 2A2C (2-digit + 2-digit, with carry)
+    // ─────────────────────────────────────────────────────────────────────────────
+    val LEVEL2_ADDITION_DISPATCH = mapOf(
+        // Q1: 1-digit with carry
+        "" to BoundaryState.Ask("1AC"),
+
+        // Passed Q1 → Q2: 2-digit no carry
+        "1" to BoundaryState.Ask("2A2"),
+
+        // Passed Q1 & Q2 → Q3: 2-digit with carry
+        "11" to BoundaryState.Ask("2A2C"),
+
+        // Passed all three
+        "111" to BoundaryState.Terminal(
+            solvable   = setOf("1A","1AC","2A1","2A1C","2A2","2A2C"),
+            unsolvable = emptySet(),
+            boundary   = setOf("2A2C")
+        ),
+        // Passed Q1, Q2 but failed Q3
+        "110" to BoundaryState.Terminal(
+            solvable   = setOf("1A","1AC","2A1","2A1C","2A2"),
+            unsolvable = setOf("2A2C"),
+            boundary   = setOf("2A2")
+        ),
+        // Passed Q1 but failed Q2
+        "10" to BoundaryState.Terminal(
+            solvable   = setOf("1A","1AC"),
+            unsolvable = setOf("2A1","2A1C","2A2","2A2C"),
+            boundary   = setOf("1AC")
+        ),
+
+        // Failed Q1 → Q2: basic 1-digit no carry
+        "0" to BoundaryState.Ask("1A"),
+
+        // Failed Q1, passed basic 1A
+        "01" to BoundaryState.Terminal(
+            solvable   = setOf("1A"),
+            unsolvable = setOf("1AC","2A1","2A1C","2A2","2A2C"),
+            boundary   = setOf("1A")
+        ),
+        // Failed both Q1 and basic 1A
+        "00" to BoundaryState.Terminal(
+            solvable   = emptySet(),
+            unsolvable = setOf("1A","1AC","2A1","2A1C","2A2","2A2C"),
+            boundary   = setOf("1A")
+        )
+    )
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // LEVEL 2 SUBTRACTION ASSESSMENT (2-digit mode)
+    // Order: Q1 = 2S1B (2-digit with borrow)
+    //        Q2 = 2S2  (2-digit − 2-digit, no borrow)
+    //        Q3 = 2S2B (2-digit − 2-digit, with borrow)
+    // ─────────────────────────────────────────────────────────────────────────────
+    val LEVEL2_SUBTRACTION_DISPATCH = mapOf(
+        // Q1: 2-digit with borrow
+        "" to BoundaryState.Ask("2S1B"),
+
+        // Passed Q1 → Q2: 2-digit − 2-digit no borrow
+        "1" to BoundaryState.Ask("2S2"),
+
+        // Passed Q1 & Q2 → Q3: 2-digit − 2-digit with borrow
+        "11" to BoundaryState.Ask("2S2B"),
+
+        // Passed all three
+        "111" to BoundaryState.Terminal(
+            solvable   = setOf("1S","2S1","2S1B","2S2","2S2B"),
+            unsolvable = emptySet(),
+            boundary   = setOf("2S2B")
+        ),
+        // Passed Q1, Q2 but failed Q3
+        "110" to BoundaryState.Terminal(
+            solvable   = setOf("1S","2S1","2S1B","2S2"),
+            unsolvable = setOf("2S2B"),
+            boundary   = setOf("2S2")
+        ),
+        // Passed Q1 but failed Q2
+        "10" to BoundaryState.Terminal(
+            solvable   = setOf("1S","2S1","2S1B"),
+            unsolvable = setOf("2S2","2S2B"),
+            boundary   = setOf("2S1B")
+        ),
+
+        // Failed Q1 → Q2: simpler 2-digit no borrow
+        "0" to BoundaryState.Ask("2S1"),
+
+        // Failed Q1, passed 2S1
+        "01" to BoundaryState.Terminal(
+            solvable   = setOf("1S","2S1"),
+            unsolvable = setOf("2S1B","2S2","2S2B"),
+            boundary   = setOf("2S1")
+        ),
+        // Failed Q1, failed 2S1 → check basic 1-digit
+        "00" to BoundaryState.Ask("1S"),
+
+        // Failed Q1, Q2, passed 1S
+        "001" to BoundaryState.Terminal(
+            solvable   = setOf("1S"),
+            unsolvable = setOf("2S1","2S1B","2S2","2S2B"),
+            boundary   = setOf("1S")
+        ),
+        // Failed everything
+        "000" to BoundaryState.Terminal(
+            solvable   = emptySet(),
+            unsolvable = setOf("1S","2S1","2S1B","2S2","2S2B"),
+            boundary   = setOf("1S")
+        )
+    )
+
     /**
      * Returns the next state based on the current binary response string.
+     * @param isLevel2 if true, uses the Level 2 dispatch table instead of the full tree.
      */
-    fun getNextState(responseString: String, isAddition: Boolean): BoundaryState? {
-        val dispatch = if (isAddition) ADDITION_DISPATCH else SUBTRACTION_DISPATCH
+    fun getNextState(responseString: String, isAddition: Boolean, isLevel2: Boolean = false): BoundaryState? {
+        val dispatch = when {
+            isLevel2 && isAddition  -> LEVEL2_ADDITION_DISPATCH
+            isLevel2 && !isAddition -> LEVEL2_SUBTRACTION_DISPATCH
+            isAddition              -> ADDITION_DISPATCH
+            else                    -> SUBTRACTION_DISPATCH
+        }
         return dispatch[responseString]
     }
 }
