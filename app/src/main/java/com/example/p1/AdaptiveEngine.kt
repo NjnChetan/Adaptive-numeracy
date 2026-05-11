@@ -398,7 +398,7 @@ class AdaptiveEngine {
             val allPrereqsMet = prereqs.all { student.isMastered(it) }
             if (!allPrereqsMet) {
                 Log.d(TAG, "  KC $childKc (${BoundaryAssessmentEngine.ID_TO_NODE[childKc]}) still locked: " +
-                    "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+                        "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
                 continue
             }
             if (!student.isMastered(childKc)) {
@@ -441,7 +441,7 @@ class AdaptiveEngine {
             logUCBValues(zpd, focus)
             return focus
         }
-        val selected       = bandit.selectConcept(zpd)
+        val selected       = bandit.selectConcept(zpd, practiceQuestionNo)
         focusKC            = selected
         focusQuestionCount = 1
         consecutiveWrong   = 0
@@ -452,11 +452,10 @@ class AdaptiveEngine {
     private fun logUCBValues(zpd: List<Int>, selected: Int) {
         // Compute UCB for all active arms before logging
         val activeNodes = zpd.filter { bandit.hasArm(it) }
-        val nt = activeNodes.sumOf { bandit.getNode(it)?.timesPlayed ?: 0 }.coerceAtLeast(2)
         for (kcId in activeNodes) {
             val node = bandit.getNode(kcId)
             if (node != null && node.timesPlayed > 0) {
-                node.computeUCB(nt)
+                node.computeUCB(practiceQuestionNo)
             }
         }
 

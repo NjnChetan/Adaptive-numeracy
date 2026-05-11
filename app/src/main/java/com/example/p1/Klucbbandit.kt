@@ -39,12 +39,14 @@ class KLUCBNode(
     }
 
     /**
-     * Translated from Python compute_lcb_ucb(t):
+     * Translated from Python compute_lcb_ucb(ts):
+     *   t = ts - timeAdded
      *   val = log(1 + t * log(t)^2) / timesPlayed
      *   ucb = getUCB(val, estimate)
      *   lcb = getLCB(val, estimate)
      */
-    fun computeUCB(t: Int) {
+    fun computeUCB(ts: Int) {
+        val t    = (ts - timeAdded).coerceAtLeast(2)
         val tD   = t.toDouble()
         val val_ = ln(1.0 + tD * ln(tD).pow(2)) / timesPlayed
         ucb = getUCB(val_, estimate)
@@ -283,11 +285,10 @@ class KLUCBBandit {
      * Select the KC to present next.
      * Logic unchanged — translated from klucbCUSUM():
      *   1. Play any unplayed arm first
-     *   2. Compute nt = total plays across all nodes
-     *   3. Compute UCB for each node
-     *   4. Return arm with highest UCB
+     *   2. Compute UCB for each node using ts (total practice questions)
+     *   3. Return arm with highest UCB
      */
-    fun selectConcept(zpd: List<Int>): Int {
+    fun selectConcept(zpd: List<Int>, ts: Int): Int {
         val active = zpd.filter { it in nodes }
         if (active.isEmpty()) {
             return if (zpd.isNotEmpty()) zpd.first() else 1
@@ -296,9 +297,7 @@ class KLUCBBandit {
         active.firstOrNull { nodes[it]!!.timesPlayed == 0 }
             ?.let { return it }
 
-        val nt = nodes.values.sumOf { it.timesPlayed }.coerceAtLeast(2)
-
-        active.forEach { kcId -> nodes[kcId]?.computeUCB(nt) }
+        active.forEach { kcId -> nodes[kcId]?.computeUCB(ts) }
         return active.maxByOrNull { nodes[it]?.ucb ?: Double.MIN_VALUE } ?: active.first()
     }
 
