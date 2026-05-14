@@ -12,7 +12,7 @@ data class KnowledgeComponent(
 
 data class TransitionProb(val low: Double, val high: Double)
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────
 // ADDITION syllabus graph (9 nodes, IDs 1–9):
 //
 //                  1A                        id=1

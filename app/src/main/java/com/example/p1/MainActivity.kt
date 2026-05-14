@@ -8,6 +8,7 @@ import android.util.TypedValue
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
+import android.graphics.Typeface
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -64,15 +65,13 @@ class MainActivity : AppCompatActivity() {
         val panel        = findViewById<View>(panelId) ?: return
         val clipView     = findViewById<View>(clipId)  ?: return
         val panelContent = panel.findViewById<View>(R.id.panelContent) ?: return
-        val digitLayout  = panel.findViewById<View>(R.id.digitLayout)  ?: return
         val homeLayout   = panel.findViewById<View>(R.id.homeLayout)   ?: return
-        val quizLayout   = panel.findViewById<View>(R.id.quizLayout)   ?: return
+        val quizLayout    = panel.findViewById<View>(R.id.quizLayout)   ?: return
+        val summaryLayout = panel.findViewById<View>(R.id.summaryLayout) ?: return
 
         val btn1Digit      = panel.findViewById<MaterialButton>(R.id.btn1Digit) ?: return
         val btn2Digit      = panel.findViewById<MaterialButton>(R.id.btn2Digit) ?: return
         val btn3Digit      = panel.findViewById<MaterialButton>(R.id.btn3Digit) ?: return
-        val digitNavHome   = panel.findViewById<View>(R.id.digitNavHome)
-        val digitNavRotate = panel.findViewById<View>(R.id.digitNavRotate)
 
         val langToggle = panel.findViewById<SwitchCompat>(R.id.langToggle)
         val btnAdd     = panel.findViewById<MaterialButton>(R.id.btnAdd)   ?: return
@@ -90,11 +89,19 @@ class MainActivity : AppCompatActivity() {
         val cardBorder   = panel.findViewById<View>(R.id.cardBorder)
         val btnRow1      = panel.findViewById<View>(R.id.btnRow1)
         val btnRow2      = panel.findViewById<View>(R.id.btnRow2)
+        val finishBtn    = panel.findViewById<MaterialButton>(R.id.finishBtn)
 
-        val homeNavHome   = panel.findViewById<View>(R.id.homeNavHome)
         val homeNavRotate = panel.findViewById<View>(R.id.homeNavRotate)
         val navHome       = panel.findViewById<View>(R.id.navHome)
         val navRotate     = panel.findViewById<View>(R.id.navRotate)
+
+        val summaryNavHome         = panel.findViewById<View>(R.id.summaryNavHome)
+        val summaryScoreText       = panel.findViewById<TextView>(R.id.summaryScoreText)
+        val summaryPercentText     = panel.findViewById<TextView>(R.id.summaryPercentText)
+        val circularProgressBar    = panel.findViewById<android.widget.ProgressBar>(R.id.circularProgressBar)
+        val summaryCorrectCount    = panel.findViewById<TextView>(R.id.summaryCorrectCount)
+        val summaryIncorrectCount  = panel.findViewById<TextView>(R.id.summaryIncorrectCount)
+        val performanceContainer   = panel.findViewById<android.widget.LinearLayout>(R.id.performanceContainer)
 
         val opButtons     = listOf(btnAdd, btnSub, btnMul, btnDiv)
         val answerButtons = listOf(option1, option2, option3, option4)
@@ -122,10 +129,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         var selectedOp: String? = null
-        var selectedDigitMode: Int = 3
+        var selectedDigitMode: Int? = null
         var correct = 0
         var total   = 0
         var isMarathi = false
+
+        // --- Session Statistics ---
+        val conceptStats = mutableMapOf<String, Pair<Int, Int>>() // Name -> (Correct, Total)
+        val masteredLevels = mutableSetOf<String>()
 
         langToggle?.setOnCheckedChangeListener { _, checked -> isMarathi = checked }
 
@@ -135,18 +146,19 @@ class MainActivity : AppCompatActivity() {
         }
         fun loc(s: String) = if (isMarathi) toMarathi(s) else s
 
+        fun updateStartButton() {
+            val ready = selectedOp != null && selectedDigitMode != null
+            startBtn.isEnabled = ready
+            startBtn.setBackgroundColor(if (ready) colorOn else colorOff)
+        }
+
         fun selectDigit(mode: Int) {
             engine.applyDigitMode(mode)
             selectedDigitMode = mode
-            selectedOp = null
-            opButtons.forEach { it.setBackgroundColor(colorOff) }
-            startBtn.isEnabled = false
-            startBtn.setBackgroundColor(colorOff)
             digitButtons.forEachIndexed { i, b ->
                 b.setBackgroundColor(if (i + 1 == mode) colorOn else colorOff)
             }
-            digitLayout.visibility = View.GONE
-            homeLayout.visibility  = View.VISIBLE
+            updateStartButton()
         }
 
         btn1Digit.setOnClickListener { selectDigit(1) }
@@ -158,8 +170,7 @@ class MainActivity : AppCompatActivity() {
             engine.setOperation(op)
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             btn.setBackgroundColor(colorOn)
-            startBtn.isEnabled = true
-            startBtn.setBackgroundColor(colorOn)
+            updateStartButton()
         }
 
         btnAdd.setOnClickListener { selectOp(btnAdd, "+") }
@@ -167,18 +178,121 @@ class MainActivity : AppCompatActivity() {
         btnMul.setOnClickListener { selectOp(btnMul, "×") }
         btnDiv.setOnClickListener { selectOp(btnDiv, "÷") }
 
+        fun showSummary() {
+            sessionLogger.endSession()
+            quizLayout.visibility = View.GONE
+            summaryLayout.visibility = View.VISIBLE
+
+            val perc = if (total > 0) (correct * 100) / total else 0
+            summaryScoreText?.text = "$correct/$total"
+            summaryPercentText?.text = "$perc%"
+            circularProgressBar?.progress = perc
+            summaryCorrectCount?.text = "$correct"
+            summaryIncorrectCount?.text = "${total - correct}"
+
+            performanceContainer?.removeAllViews()
+            val sortedConcepts = conceptStats.keys.sorted()
+
+            sortedConcepts.forEach { concept ->
+                val stats = conceptStats[concept] ?: Pair(0, 0)
+                val cCorrect = stats.first
+                val cTotal = stats.second
+                val cPerc = if (cTotal > 0) (cCorrect * 100) / cTotal else 0
+
+                val row = android.widget.LinearLayout(this@MainActivity).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(0, 12, 0, 12)
+                    background = GradientDrawable().apply {
+                        setColor(Color.WHITE); cornerRadius = 16f
+                        setStroke(1, Color.parseColor("#F0F2F5"))
+                    }
+                    val lp = android.widget.LinearLayout.LayoutParams(-1, -2)
+                    lp.setMargins(0, 0, 0, 12)
+                    layoutParams = lp
+                    setPadding(16, 12, 16, 12)
+                }
+
+                val header = android.widget.LinearLayout(this@MainActivity).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                }
+
+                val nameLabel = TextView(this@MainActivity).apply {
+                    text = loc(concept)
+                    textSize = 12f; setTypeface(null, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#1A1A2E"))
+                    layoutParams = android.widget.LinearLayout.LayoutParams(0, -2, 1f)
+                }
+
+                // Badge
+                val badge = TextView(this@MainActivity).apply {
+                    val isGood = cPerc >= 80
+                    text = if (isGood) "✓ Good" else "OK"
+                    textSize = 10f; setTypeface(null, Typeface.BOLD)
+                    setPadding(8, 2, 8, 2)
+                    setTextColor(if (isGood) Color.parseColor("#2E7D32") else Color.parseColor("#1A2560"))
+                    background = GradientDrawable().apply {
+                        cornerRadius = 12f
+                        setColor(if (isGood) Color.parseColor("#E8F5E9") else Color.parseColor("#E8EAF6"))
+                    }
+                }
+
+                val scoreLabel = TextView(this@MainActivity).apply {
+                    text = loc("$cCorrect/$cTotal")
+                    textSize = 10f; setTextColor(Color.parseColor("#909BA6"))
+                    setPadding(8, 0, 0, 0)
+                }
+
+                header.addView(nameLabel); header.addView(badge); header.addView(scoreLabel)
+
+                // Progress Bar
+                val progressContainer = android.widget.FrameLayout(this@MainActivity).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(-1, (6 * resources.displayMetrics.density).toInt()).apply {
+                        setMargins(0, 8, 0, 0)
+                    }
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#F0F2F5")); cornerRadius = 8f
+                    }
+                }
+
+                val progressFill = View(this@MainActivity).apply {
+                    layoutParams = android.widget.FrameLayout.LayoutParams(0, -1)
+                    background = GradientDrawable().apply {
+                        setColor(if (cPerc >= 80) Color.parseColor("#2E7D32") else Color.parseColor("#2B3A8C"))
+                        cornerRadius = 8f
+                    }
+                    post {
+                        val lp = layoutParams; lp.width = (progressContainer.width * (cPerc / 100f)).toInt()
+                        layoutParams = lp
+                    }
+                }
+
+                progressContainer.addView(progressFill)
+                row.addView(header); row.addView(progressContainer)
+                performanceContainer?.addView(row)
+            }
+        }
+
         fun showMastered() {
             btnRow1?.visibility = View.GONE
             btnRow2?.visibility = View.GONE
             cardBorder?.background = normalBorder
             questionText.setTextColor(Color.parseColor("#2B3A8C"))
             questionText.text = loc(" Mastered!")
+            
+            lifecycleScope.launch(Dispatchers.Main) {
+                kotlinx.coroutines.delay(2000)
+                showSummary()
+            }
         }
 
         fun loadQuestion() {
             answerButtons.forEach { it.isEnabled = false }
 
-            lifecycleScope.launch {
+            lifecycleScope.launch(Dispatchers.Default) {
+
+                // ── All engine reads MUST happen on Dispatchers.Default ──────
+                // ── to avoid data races with submitAnswer() ──────────────────
 
                 // ── All mastered ────────────────────────────────────────────
                 if (engine.consumeAllMastered()) {
@@ -190,7 +304,7 @@ class MainActivity : AppCompatActivity() {
                 val boundary = engine.consumeBoundary()
 
                 if (boundary != null) {
-                    // Log K-BOUNDARY
+                    // Log K-BOUNDARY (file I/O is fine on Default)
                     sessionLogger.logKBoundary(boundary.toList())
 
                     if (engine.consumeAllMastered()) {
@@ -209,14 +323,13 @@ class MainActivity : AppCompatActivity() {
                         btnRow1?.visibility = View.VISIBLE
                         btnRow2?.visibility = View.VISIBLE
                     }
-                    loadQuestion()
+                    // Re-enter loadQuestion() via Main to avoid deep recursion on Default
+                    withContext(Dispatchers.Main) { loadQuestion() }
                     return@launch
                 }
 
-                // ── Generate next question ─────────────────────────────────
-                val (question, answers) = withContext(Dispatchers.Default) {
-                    engine.generateQuestion()
-                }
+                // ── Generate next question (already on Default) ────────────
+                val (question, answers) = engine.generateQuestion()
 
                 if (engine.consumeAllMastered()) {
                     withContext(Dispatchers.Main) { showMastered() }
@@ -254,12 +367,15 @@ class MainActivity : AppCompatActivity() {
                             val isAssessment = engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT
                             val qNo = if (isAssessment) engine.detectionQuestionNo else engine.practiceQuestionNo
 
-                            lifecycleScope.launch {
-                                withContext(Dispatchers.Default) {
-                                    engine.submitAnswer(answers[i])
-                                }
+                            lifecycleScope.launch(Dispatchers.Default) {
+                                // submitAnswer on Default — it does CUSUM/BKT computation
+                                engine.submitAnswer(answers[i])
 
-                                // CSV logging
+                                // Track stats for summary
+                                val stats = conceptStats.getOrDefault(qKCName, Pair(0, 0))
+                                conceptStats[qKCName] = Pair(stats.first + (if (ok) 1 else 0), stats.second + 1)
+
+                                // CSV logging (file I/O fine on Default)
                                 val misconception = if (!ok) {
                                     DistractorGenerator.getMisconception(qKCId, qNum1, qNum2, qCorrectAns, answers[i])
                                 } else ""
@@ -270,11 +386,11 @@ class MainActivity : AppCompatActivity() {
                                     sessionLogger.logPractice(qNo, qKCName, qText, qCorrectAns, answers[i], ok, misconception)
                                 }
 
-                                // Check mastery event
+                                // Consume events — all on Default (safe, no race)
                                 engine.consumeMasteryEvent()?.let { evt ->
                                     sessionLogger.logMastery(qNo, evt.conceptName, evt.correctnessRecord)
+                                    masteredLevels.add(evt.conceptName)
                                 }
-                                // Check ZPD update event
                                 engine.consumeZpdUpdate()?.let { added ->
                                     sessionLogger.logZpdUpdate(added)
                                 }
@@ -302,7 +418,8 @@ class MainActivity : AppCompatActivity() {
                                     scoreText?.text = "$correct/$total"
                                 }
                                 kotlinx.coroutines.delay(900)
-                                loadQuestion()
+                                // Switch to Main before calling loadQuestion() to reset the stack
+                                withContext(Dispatchers.Main) { loadQuestion() }
                             }
                         }
                     }
@@ -320,24 +437,27 @@ class MainActivity : AppCompatActivity() {
                 "×" -> "Multiplication"; "÷" -> "Division"
                 else -> selectedOp ?: ""
             }
-            sessionLogger.logSettings(lang, opName, selectedDigitMode)
+            sessionLogger.logSettings(lang, opName, selectedDigitMode ?: 1)
 
             correct = 0; total = 0
+            conceptStats.clear()
+            masteredLevels.clear()
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
             loadQuestion()
         }
 
-        homeNavHome?.setOnClickListener {
-            homeLayout.visibility  = View.GONE
-            digitLayout.visibility = View.VISIBLE
-        }
+        finishBtn?.setOnClickListener { showSummary() }
+
         navHome?.setOnClickListener {
             sessionLogger.endSession()
             quizLayout.visibility = View.GONE
             homeLayout.visibility = View.VISIBLE
         }
-        digitNavHome?.setOnClickListener { /* already on digit screen */ }
+        summaryNavHome?.setOnClickListener {
+            summaryLayout.visibility = View.GONE
+            homeLayout.visibility = View.VISIBLE
+        }
 
         fun applyScaledText(visW: Int, visH: Int) {
             if (visW <= 0 || visH <= 0) return
@@ -402,6 +522,8 @@ class MainActivity : AppCompatActivity() {
 
         homeNavRotate?.setOnClickListener { doRotate() }
         navRotate?.setOnClickListener { doRotate() }
-        digitNavRotate?.setOnClickListener { doRotate() }
+
+        // Default to Level 1
+        selectDigit(1)
     }
 }

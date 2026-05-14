@@ -13,144 +13,12 @@
         android:background="#FFFFFF"
         android:clipToPadding="false">
 
-        <!-- ── DIGIT SELECTION SCREEN ── -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/digitLayout"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <TextView
-                android:id="@+id/digitTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Select Level"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="#2B3A8C"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintBottom_toTopOf="@id/digitBtnRow"
-                app:layout_constraintVertical_chainStyle="packed"
-                android:layout_marginBottom="10dp"/>
-
-            <LinearLayout
-                android:id="@+id/digitBtnRow"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginHorizontal="12dp"
-                app:layout_constraintTop_toBottomOf="@id/digitTitle"
-                app:layout_constraintBottom_toTopOf="@id/digitNavBar"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn1Digit"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_weight="1"
-                    android:layout_margin="5dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    android:text="1"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"/>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn2Digit"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_weight="1"
-                    android:layout_margin="5dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    android:text="2"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"/>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn3Digit"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_weight="1"
-                    android:layout_margin="5dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:insetLeft="0dp"
-                    android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    android:text="3"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"/>
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/digitNavBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:background="#F0F2FF"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <TextView
-                    android:id="@+id/digitNavHome"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:padding="8dp"
-                    android:text="⌂"
-                    android:textSize="16sp"
-                    android:textColor="#2B3A8C"
-                    android:background="?attr/selectableItemBackgroundBorderless"/>
-
-                <TextView
-                    android:id="@+id/digitNavRotate"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:padding="8dp"
-                    android:text="⟳"
-                    android:textSize="16sp"
-                    android:textColor="#2B3A8C"
-                    android:background="?attr/selectableItemBackgroundBorderless"/>
-
-            </LinearLayout>
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <!-- ── OPERATION SELECTION SCREEN ── -->
+        <!-- ── HOME SCREEN (Level & Operation Selection) ── -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/homeLayout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone">
+            android:visibility="visible">
 
             <LinearLayout
                 android:id="@+id/langBar"
@@ -190,132 +58,204 @@
 
             </LinearLayout>
 
+            <!-- LEVEL SELECTION -->
+            <TextView
+                android:id="@+id/levelTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select Level"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#2B3A8C"
+                android:layout_marginStart="12dp"
+                app:layout_constraintTop_toBottomOf="@id/langBar"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/digitBtnRow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginTop="2dp"
+                app:layout_constraintTop_toBottomOf="@id/levelTitle"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn1Digit"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_margin="3dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:text="1"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#8A99CC"
+                    app:cornerRadius="8dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn2Digit"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_margin="3dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:text="2"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#8A99CC"
+                    app:cornerRadius="8dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn3Digit"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_margin="3dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:text="3"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#8A99CC"
+                    app:cornerRadius="8dp"/>
+
+            </LinearLayout>
+
+            <!-- OPERATION SELECTION -->
+            <TextView
+                android:id="@+id/opTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select Operation"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#2B3A8C"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="8dp"
+                app:layout_constraintTop_toBottomOf="@id/digitBtnRow"
+                app:layout_constraintStart_toStartOf="parent" />
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/opGrid"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
-                app:layout_constraintBottom_toTopOf="@id/startBtn"
-                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginTop="2dp"
+                app:layout_constraintTop_toBottomOf="@id/opTitle"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/langBar"
-                app:layout_constraintVertical_chainStyle="packed">
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAdd"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_margin="5dp"
+                    android:layout_height="40dp"
+                    android:layout_margin="3dp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
                     android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
                     android:text="+"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"
-                    app:layout_constraintBottom_toTopOf="@id/btnMul"
-                    app:layout_constraintEnd_toStartOf="@id/btnSub"
-                    app:layout_constraintHorizontal_chainStyle="spread"
+                    app:cornerRadius="8dp"
+                    app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintEnd_toStartOf="@id/btnSub"
+                    app:layout_constraintHorizontal_chainStyle="spread"/>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSub"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_margin="5dp"
+                    android:layout_height="40dp"
+                    android:layout_margin="3dp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
                     android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
                     android:text="−"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"
-                    app:layout_constraintBottom_toBottomOf="@id/btnAdd"
-                    app:layout_constraintEnd_toEndOf="parent"
+                    app:cornerRadius="8dp"
+                    app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toEndOf="@id/btnAdd"
-                    app:layout_constraintTop_toTopOf="@id/btnAdd" />
+                    app:layout_constraintEnd_toEndOf="parent"/>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnMul"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_margin="5dp"
+                    android:layout_height="40dp"
+                    android:layout_margin="3dp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
                     android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
                     android:text="×"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toStartOf="@id/btnDiv"
+                    app:cornerRadius="8dp"
+                    app:layout_constraintTop_toBottomOf="@id/btnAdd"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/btnAdd" />
+                    app:layout_constraintEnd_toStartOf="@id/btnDiv"/>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnDiv"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_margin="5dp"
+                    android:layout_height="40dp"
+                    android:layout_margin="3dp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
                     android:insetLeft="0dp"
                     android:insetRight="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
                     android:text="÷"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     app:backgroundTint="#8A99CC"
-                    app:cornerRadius="12dp"
-                    app:layout_constraintBottom_toBottomOf="@id/btnMul"
-                    app:layout_constraintEnd_toEndOf="parent"
+                    app:cornerRadius="8dp"
+                    app:layout_constraintTop_toBottomOf="@id/btnSub"
                     app:layout_constraintStart_toEndOf="@id/btnMul"
-                    app:layout_constraintTop_toTopOf="@id/btnMul" />
+                    app:layout_constraintEnd_toEndOf="parent"/>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/startBtn"
-                android:layout_width="103dp"
-                android:layout_height="35dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="8dp"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginHorizontal="32dp"
+                android:layout_marginTop="12dp"
                 android:enabled="false"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
-                android:paddingHorizontal="32dp"
                 android:text="Start"
                 android:textColor="#FFFFFF"
-                android:textSize="15sp"
+                android:textSize="16sp"
+                android:textStyle="bold"
                 app:backgroundTint="#8A99CC"
-                app:cornerRadius="50dp"
-                app:layout_constraintBottom_toTopOf="@id/homeNavBar"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
+                app:cornerRadius="20dp"
                 app:layout_constraintTop_toBottomOf="@id/opGrid"
-                app:layout_constraintVertical_bias="0.5" />
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"/>
 
             <LinearLayout
                 android:id="@+id/homeNavBar"
@@ -323,51 +263,20 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:background="#F0F2FF"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <TextView
-                    android:id="@+id/homeNavHome"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:padding="8dp"
-                    android:text="⌂"
-                    android:textSize="16sp"
-                    android:textColor="#2B3A8C"
-                    android:background="?attr/selectableItemBackgroundBorderless"/>
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <TextView
                     android:id="@+id/homeNavRotate"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:gravity="center"
                     android:padding="8dp"
-                    android:text="⟳"
-                    android:textSize="16sp"
+                    android:text="⟳ Rotate"
+                    android:textSize="14sp"
                     android:textColor="#2B3A8C"
                     android:background="?attr/selectableItemBackgroundBorderless"/>
 
             </LinearLayout>
-
-            <LinearLayout android:id="@+id/homeMiddle"
-                android:layout_width="0dp" android:layout_height="0dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"/>
-            <LinearLayout android:id="@+id/opContainer"
-                android:layout_width="0dp" android:layout_height="0dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"/>
-            <LinearLayout android:id="@+id/startBtnWrapper"
-                android:layout_width="0dp" android:layout_height="0dp"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"/>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -543,6 +452,22 @@
                     android:textColor="#2B3A8C"
                     android:background="?attr/selectableItemBackgroundBorderless"/>
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/finishBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="32dp"
+                    android:layout_weight="1.5"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginHorizontal="4dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="Finish"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#C62828"
+                    app:cornerRadius="4dp"/>
+
                 <TextView
                     android:id="@+id/navRotate"
                     android:layout_width="0dp"
@@ -558,6 +483,231 @@
             </LinearLayout>
 
         </LinearLayout>
+
+        <!-- ── SUMMARY SCREEN ── -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/summaryLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#F8F9FF"
+            android:visibility="gone">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginBottom="8dp"
+                android:fillViewport="true"
+                android:scrollbars="vertical"
+                app:layout_constraintBottom_toTopOf="@id/summaryNavBar"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:gravity="center_horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Excellent performance!"
+                        android:textColor="#5C6670"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="16dp"/>
+
+                    <!-- Circular Progress -->
+                    <FrameLayout
+                        android:id="@+id/circularContainer"
+                        android:layout_width="140dp"
+                        android:layout_height="140dp">
+                        
+                        <ProgressBar
+                            android:id="@+id/circularProgressBar"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:indeterminate="false"
+                            android:max="100"
+                            android:progress="0"
+                            android:progressDrawable="@drawable/circular_progress"
+                            android:rotation="-90" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/summaryScoreText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0/0"
+                                android:textColor="#1A1A2E"
+                                android:textSize="22sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/summaryPercentText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0%"
+                                android:textColor="#2E7D32"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+                                
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Score"
+                                android:textColor="#909BA6"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <!-- Stats Cards -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:orientation="horizontal">
+
+                        <!-- Correct Card -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/stats_card_bg"
+                            android:elevation="2dp"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+                            
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="✓"
+                                android:textColor="#2E7D32"
+                                android:textSize="16sp"
+                                android:textStyle="bold"/>
+                                
+                            <TextView
+                                android:id="@+id/summaryCorrectCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textColor="#2E7D32"
+                                android:textSize="18sp"
+                                android:textStyle="bold"/>
+                                
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Correct"
+                                android:textColor="#909BA6"
+                                android:textSize="10sp"/>
+                        </LinearLayout>
+
+                        <!-- Incorrect Card -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/stats_card_bg"
+                            android:elevation="2dp"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="✕"
+                                android:textColor="#C62828"
+                                android:textSize="16sp"
+                                android:textStyle="bold"/>
+
+                            <TextView
+                                android:id="@+id/summaryIncorrectCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textColor="#C62828"
+                                android:textSize="18sp"
+                                android:textStyle="bold"/>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Incorrect"
+                                android:textColor="#909BA6"
+                                android:textSize="10sp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:text="How you did by topic"
+                        android:textColor="#1A1A2E"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:id="@+id/performanceContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical" />
+
+                </LinearLayout>
+            </ScrollView>
+
+            <LinearLayout
+                android:id="@+id/summaryNavBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#F0F2FF"
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <TextView
+                    android:id="@+id/summaryNavHome"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:text="⌂ Home"
+                    android:textColor="#2B3A8C"
+                    android:textSize="14sp" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="#D1D9E6" />
+
+                <TextView
+                    android:id="@+id/summaryShareLog"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:padding="8dp"
+                    android:text="📤 Share Log"
+                    android:textColor="#2B3A8C"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </FrameLayout>
 </FrameLayout>
