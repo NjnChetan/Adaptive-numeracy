@@ -76,7 +76,7 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        currentPhase = if (digitMode >= 2) Phase.ASSESSMENT else Phase.LEARNING
+        currentPhase = if (digitMode == 3) Phase.ASSESSMENT else Phase.LEARNING
         assessmentResponseString = ""
         student.reset()
         assessmentAnswers.clear()
