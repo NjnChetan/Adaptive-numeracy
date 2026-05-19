@@ -301,18 +301,43 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/scoreText"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="6dp"
-                android:text="0/0"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:paddingHorizontal="6dp"
-                android:paddingVertical="2dp"
-                android:background="@drawable/bg_score_badge"/>
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:gravity="center_vertical"
+                android:baselineAligned="false">
+
+                <!-- Left side: Score -->
+                <TextView
+                    android:id="@+id/scoreText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0/0"
+                    android:textColor="#2B3A8C"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <!-- Right side: Concepts -->
+                <HorizontalScrollView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:scrollbars="none"
+                    android:layout_marginStart="8dp"
+                    android:fillViewport="true">
+
+                    <LinearLayout
+                        android:id="@+id/conceptsContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical|end"
+                        android:layout_gravity="end"/>
+                </HorizontalScrollView>
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/cardBorder"
@@ -523,6 +548,7 @@
                     android:gravity="center_horizontal">
 
                     <TextView
+                        android:id="@+id/summaryExcellentText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Excellent performance!"
@@ -573,6 +599,7 @@
                                 android:textStyle="bold" />
 
                             <TextView
+                                android:id="@+id/summaryScoreTitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Score"
@@ -618,6 +645,7 @@
                                 android:textStyle="bold"/>
 
                             <TextView
+                                android:id="@+id/summaryCorrectTitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Correct"
@@ -655,6 +683,7 @@
                                 android:textStyle="bold"/>
 
                             <TextView
+                                android:id="@+id/summaryIncorrectTitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Incorrect"
@@ -664,6 +693,7 @@
                     </LinearLayout>
 
                     <TextView
+                        android:id="@+id/summaryTopicTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"

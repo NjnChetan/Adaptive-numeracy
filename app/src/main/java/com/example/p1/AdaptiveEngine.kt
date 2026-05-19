@@ -60,14 +60,11 @@ class AdaptiveEngine {
     // ── Digit mode ────────────────────────────────────────────────────────────
     private var digitMode: Int = 3
 
-    fun applyDigitMode(mode: Int) {
-        digitMode = mode
-    }
-
-    fun setOperation(op: String) {
+    fun startSession(op: String, mode: Int) {
         Log.i(TAG, "--- STARTING NEW SESSION ---")
-        Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
         operationType = op
+        digitMode = mode
+        Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
         bandit.clearAll()
         cusumDetectors.clear()
         ts = 0
@@ -82,7 +79,6 @@ class AdaptiveEngine {
         assessmentAnswers.clear()
         assessmentNodeDecided = false
         initZPD()
-
     }
 
     private fun activeKCIds(): List<Int> {
@@ -116,6 +112,12 @@ class AdaptiveEngine {
     val currentKCId: Int get() = currentKC
     var detectionQuestionNo: Int = 0; private set
     var practiceQuestionNo: Int = 0; private set
+
+    val activeConceptsNames: List<String>
+        get() {
+            val filterIds = activeKCIds()
+            return filterIds.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
+        }
 
     // ── Assessment state ──────────────────────────────────────────────────
     private val assessmentAnswers = mutableMapOf<Int, MutableList<Boolean>>()

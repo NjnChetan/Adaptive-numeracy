@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         val startBtn   = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
 
         val scoreText    = panel.findViewById<TextView>(R.id.scoreText)
+        val conceptsContainer = panel.findViewById<android.widget.LinearLayout>(R.id.conceptsContainer)
         val questionText = panel.findViewById<TextView>(R.id.questionText) ?: return
         val option1      = panel.findViewById<MaterialButton>(R.id.option1) ?: return
         val option2      = panel.findViewById<MaterialButton>(R.id.option2) ?: return
@@ -109,12 +110,6 @@ class MainActivity : AppCompatActivity() {
         val colorOff = Color.parseColor("#8A99CC")
         val digitButtons = listOf(btn1Digit, btn2Digit, btn3Digit)
 
-        scoreText?.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 12f
-            setColor(Color.parseColor("#1A2560"))
-        }
-
         val normalBorder = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE; cornerRadius = 28f
             setColor(Color.WHITE); setStroke(6, Color.parseColor("#E0E0E0"))
@@ -138,13 +133,58 @@ class MainActivity : AppCompatActivity() {
         val conceptStats = mutableMapOf<String, Pair<Int, Int>>() // Name -> (Correct, Total)
         val masteredLevels = mutableSetOf<String>()
 
-        langToggle?.setOnCheckedChangeListener { _, checked -> isMarathi = checked }
-
         fun toMarathi(s: String): String {
             val m = charArrayOf('०','१','२','३','४','५','६','७','८','९')
             return s.map { if (it.isDigit()) m[it - '0'] else it }.joinToString("")
         }
-        fun loc(s: String) = if (isMarathi) toMarathi(s) else s
+        fun loc(s: String): String {
+            if (!isMarathi) return s
+            if (s.startsWith("Q: ")) return "प्रश्न: " + toMarathi(s.substring(3))
+            val translated = when(s) {
+                "Select Level" -> "पातळी निवडा"
+                "Select Operation" -> "क्रिया निवडा"
+                "Start" -> "सुरू करा"
+                "⟳ Rotate" -> "⟳ फिरवा"
+                "Finish" -> "संपवा"
+                "Excellent performance!" -> "उत्कृष्ट कामगिरी!"
+                "Score" -> "गुण"
+                "Correct" -> "बरोबर"
+                "Incorrect" -> "चूक"
+                "How you did by topic" -> "विषयानुसार तुमची कामगिरी"
+                "⌂ Home" -> "⌂ मुख्य पान"
+                " Mastered!" -> " प्राविण्य मिळवले!"
+                "\n\nPractice Starts" -> "\n\nसराव सुरू"
+                "✓ Good" -> "✓ छान"
+                "OK" -> "ठीक आहे"
+                else -> s
+            }
+            return toMarathi(translated)
+        }
+
+        fun updateStaticTexts() {
+            val levelTitle = panel.findViewById<TextView>(R.id.levelTitle)
+            val opTitle = panel.findViewById<TextView>(R.id.opTitle)
+            val homeNavRotate = panel.findViewById<TextView>(R.id.homeNavRotate)
+            val summaryNavHome = panel.findViewById<TextView>(R.id.summaryNavHome)
+            
+            levelTitle?.text = loc("Select Level")
+            opTitle?.text = loc("Select Operation")
+            startBtn.text = loc("Start")
+            homeNavRotate?.text = loc("⟳ Rotate")
+            finishBtn?.text = loc("Finish")
+            summaryNavHome?.text = loc("⌂ Home")
+            
+            panel.findViewById<TextView>(R.id.summaryScoreTitle)?.text = loc("Score")
+            panel.findViewById<TextView>(R.id.summaryCorrectTitle)?.text = loc("Correct")
+            panel.findViewById<TextView>(R.id.summaryIncorrectTitle)?.text = loc("Incorrect")
+            panel.findViewById<TextView>(R.id.summaryTopicTitle)?.text = loc("How you did by topic")
+            panel.findViewById<TextView>(R.id.summaryExcellentText)?.text = loc("Excellent performance!")
+        }
+
+        langToggle?.setOnCheckedChangeListener { _, checked -> 
+            isMarathi = checked 
+            updateStaticTexts()
+        }
 
         fun updateStartButton() {
             val ready = selectedOp != null && selectedDigitMode != null
@@ -153,7 +193,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun selectDigit(mode: Int) {
-            engine.applyDigitMode(mode)
             selectedDigitMode = mode
             digitButtons.forEachIndexed { i, b ->
                 b.setBackgroundColor(if (i + 1 == mode) colorOn else colorOff)
@@ -167,7 +206,6 @@ class MainActivity : AppCompatActivity() {
 
         fun selectOp(btn: MaterialButton, op: String) {
             selectedOp = op
-            engine.setOperation(op)
             opButtons.forEach { it.setBackgroundColor(colorOff) }
             btn.setBackgroundColor(colorOn)
             updateStartButton()
@@ -184,11 +222,11 @@ class MainActivity : AppCompatActivity() {
             summaryLayout.visibility = View.VISIBLE
 
             val perc = if (total > 0) (correct * 100) / total else 0
-            summaryScoreText?.text = "$correct/$total"
-            summaryPercentText?.text = "$perc%"
+            summaryScoreText?.text = loc("$correct/$total")
+            summaryPercentText?.text = loc("$perc%")
             circularProgressBar?.progress = perc
-            summaryCorrectCount?.text = "$correct"
-            summaryIncorrectCount?.text = "${total - correct}"
+            summaryCorrectCount?.text = loc("$correct")
+            summaryIncorrectCount?.text = loc("${total - correct}")
 
             performanceContainer?.removeAllViews()
             val sortedConcepts = conceptStats.keys.sorted()
@@ -336,11 +374,47 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
+                val activeConcepts = engine.activeConceptsNames
+                val currentConcept = engine.currentKCName
+
                 withContext(Dispatchers.Main) {
                     cardBorder?.background = normalBorder
                     questionText.setTextColor(Color.parseColor("#1A1A2E"))
                     questionText.text = loc(question)
-                    scoreText?.text = "$correct/$total"
+                    scoreText?.text = loc("Q: ${total + 1}")
+
+                    conceptsContainer?.removeAllViews()
+                    activeConcepts.forEachIndexed { index, conceptName ->
+                        val tv = TextView(this@MainActivity).apply {
+                            text = loc(conceptName)
+                            textSize = 14f
+                            setTypeface(null, Typeface.BOLD)
+                            setPadding(12, 4, 12, 4)
+                            if (conceptName == currentConcept) {
+                                setTextColor(Color.parseColor("#2B3A8C"))
+                                background = GradientDrawable().apply {
+                                    shape = GradientDrawable.RECTANGLE
+                                    cornerRadius = 8f
+                                    setStroke(4, Color.parseColor("#2B3A8C"))
+                                    setColor(Color.TRANSPARENT)
+                                }
+                            } else {
+                                setTextColor(Color.parseColor("#8A99CC"))
+                            }
+                        }
+                        conceptsContainer?.addView(tv)
+
+                        if (index < activeConcepts.size - 1) {
+                            val comma = TextView(this@MainActivity).apply {
+                                text = ","
+                                textSize = 14f
+                                setTypeface(null, Typeface.BOLD)
+                                setTextColor(Color.parseColor("#8A99CC"))
+                                setPadding(0, 4, 8, 4)
+                            }
+                            conceptsContainer?.addView(comma)
+                        }
+                    }
 
                     answerButtons.forEachIndexed { i, btn ->
                         val label = loc(answers[i].toString())
@@ -400,7 +474,6 @@ class MainActivity : AppCompatActivity() {
                                     withContext(Dispatchers.Main) {
                                         total++
                                         if (ok) correct++
-                                        scoreText?.text = "$correct/$total"
                                         showMastered()
                                     }
                                     return@launch
@@ -415,7 +488,6 @@ class MainActivity : AppCompatActivity() {
                                         questionText.text = loc(engine.correctAnswer.toString())
                                         questionText.setTextColor(Color.parseColor("#C62828"))
                                     }
-                                    scoreText?.text = "$correct/$total"
                                 }
                                 kotlinx.coroutines.delay(900)
                                 // Switch to Main before calling loadQuestion() to reset the stack
@@ -429,6 +501,8 @@ class MainActivity : AppCompatActivity() {
 
         startBtn.setOnClickListener {
             if (selectedOp == null) return@setOnClickListener
+            engine.startSession(selectedOp!!, selectedDigitMode ?: 1)
+            
             // Start CSV logging session
             sessionLogger.startSession()
             val lang = if (isMarathi) "Marathi" else "English"
