@@ -8,7 +8,7 @@ import java.io.Serializable
  */
 
 object BoundaryAssessmentEngine {
-    
+
     sealed class BoundaryState : Serializable {
         data class Ask(val nodeName: String) : BoundaryState()
         data class Terminal(
@@ -340,10 +340,46 @@ object BoundaryAssessmentEngine {
         )
     )
 
-    /**
-     * Returns the next state based on the current binary response string.
-     * @param isLevel2 if true, uses the Level 2 dispatch table instead of the full tree.
-     */
+    val LEVEL1_ADDITION_DISPATCH = mapOf(
+        "" to BoundaryState.Ask("1AC"),
+        "1" to BoundaryState.Terminal(
+            solvable   = setOf("1A", "1AC"),
+            unsolvable = emptySet(),
+            boundary   = setOf("1AC")
+        ),
+        "0" to BoundaryState.Ask("1A"),
+        "01" to BoundaryState.Terminal(
+            solvable   = setOf("1A"),
+            unsolvable = setOf("1AC"),
+            boundary   = setOf("1A")
+        ),
+        "00" to BoundaryState.Terminal(
+            solvable   = emptySet(),
+            unsolvable = setOf("1A", "1AC"),
+            boundary   = setOf("1A")
+        )
+    )
+
+    val LEVEL1_SUBTRACTION_DISPATCH = mapOf(
+        "" to BoundaryState.Ask("2S1"),
+        "1" to BoundaryState.Terminal(
+            solvable   = setOf("1S", "2S1"),
+            unsolvable = emptySet(),
+            boundary   = setOf("2S1")
+        ),
+        "0" to BoundaryState.Ask("1S"),
+        "01" to BoundaryState.Terminal(
+            solvable   = setOf("1S"),
+            unsolvable = setOf("2S1"),
+            boundary   = setOf("1S")
+        ),
+        "00" to BoundaryState.Terminal(
+            solvable   = emptySet(),
+            unsolvable = setOf("1S", "2S1"),
+            boundary   = setOf("1S")
+        )
+    )
+
     fun getNextState(responseString: String, isAddition: Boolean, isLevel2: Boolean = false): BoundaryState? {
         val dispatch = when {
             isLevel2 && isAddition  -> LEVEL2_ADDITION_DISPATCH
@@ -353,4 +389,12 @@ object BoundaryAssessmentEngine {
         }
         return dispatch[responseString]
     }
+
+    fun getNextStateLevel1(responseString: String, isAddition: Boolean): BoundaryState? =
+        if (isAddition) LEVEL1_ADDITION_DISPATCH[responseString]
+        else LEVEL1_SUBTRACTION_DISPATCH[responseString]
+
+    fun getNextStateLevel2(responseString: String, isAddition: Boolean): BoundaryState? =
+        if (isAddition) LEVEL2_ADDITION_DISPATCH[responseString]
+        else LEVEL2_SUBTRACTION_DISPATCH[responseString]
 }

@@ -128,7 +128,10 @@ class AdaptiveEngine {
     private fun initZPD() {
         kcAncestors.clear()
         val filterIds = activeKCIds()
-        val initZpd = KnowledgeRepository.getZPD(student, filterIds)
+        val initZpd = if (digitMode == 1)
+            filterIds.filter { !student.isMastered(it) }
+        else
+            KnowledgeRepository.getZPD(student, filterIds)
 
         Log.i(TAG, "── initZPD() ──")
         Log.i(TAG, "  filterIds = $filterIds")
@@ -177,6 +180,16 @@ class AdaptiveEngine {
         }
     }
 
+    // ── Pick next assessment state based on digitMode ─────────────────────────
+    private fun getNextAssessmentState(responseString: String): BoundaryAssessmentEngine.BoundaryState? {
+        val isAddition = operationType == "+"
+        return when (digitMode) {
+            1    -> BoundaryAssessmentEngine.getNextStateLevel1(responseString, isAddition)
+            2    -> BoundaryAssessmentEngine.getNextStateLevel2(responseString, isAddition)
+            else -> BoundaryAssessmentEngine.getNextState(responseString, isAddition)
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // 2-question assessment rule
     // ─────────────────────────────────────────────────────────────────────────
@@ -207,7 +220,10 @@ class AdaptiveEngine {
 
     private fun generateLearningQuestion(): Pair<String, List<Int>> {
         val filterIds = activeKCIds()
-        val zpd = KnowledgeRepository.getZPD(student, filterIds)
+        val zpd = if (digitMode == 1)
+            filterIds.filter { !student.isMastered(it) }
+        else
+            KnowledgeRepository.getZPD(student, filterIds)
 
         Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it})" }}")
         Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
@@ -246,7 +262,7 @@ class AdaptiveEngine {
     }
 
     private fun generateAssessmentQuestion(): Pair<String, List<Int>> =
-        when (val state = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+", isLevel2 = digitMode == 2)) {
+        when (val state = getNextAssessmentState(assessmentResponseString)) {
             is BoundaryAssessmentEngine.BoundaryState.Ask -> {
                 val kcId = BoundaryAssessmentEngine.NODE_TO_ID[state.nodeName] ?: 1
                 currentKC = kcId
@@ -303,7 +319,7 @@ class AdaptiveEngine {
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
 
-                val nextState = BoundaryAssessmentEngine.getNextState(assessmentResponseString, operationType == "+", isLevel2 = digitMode == 2)
+                val nextState = getNextAssessmentState(assessmentResponseString)
                 if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
                     handleTerminalAssessment(nextState)
                     currentPhase = Phase.LEARNING
@@ -364,7 +380,6 @@ class AdaptiveEngine {
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
             newlyAllMastered = true
-
         }
     }
 
@@ -394,7 +409,6 @@ class AdaptiveEngine {
 
         val unlockedKCs = mutableListOf<Int>()
         for (childKc in children) {
-            // Only check prerequisites within the current digit mode's scope
             val prereqs = KnowledgeRepository.getPrerequisites(childKc)
                 .filter { it in filterIds }
             val allPrereqsMet = prereqs.all { student.isMastered(it) }
@@ -413,7 +427,6 @@ class AdaptiveEngine {
             lastZpdUpdate = unlockedKCs.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
         }
 
-        // Recompute ZPD from ground truth to ensure correctness
         val newZpd = KnowledgeRepository.getZPD(student, filterIds)
         for (newKc in newZpd) addArmIfNeeded(newKc)
 
@@ -421,12 +434,9 @@ class AdaptiveEngine {
         Log.i(TAG, "  New ZPD = ${newZpd.map { "${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it}" }}")
         Log.i(TAG, "  Mastered so far: ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
 
-
-        // Check if all KCs in the current digit mode are mastered
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 ALL KCs MASTERED for digitMode=$digitMode!")
             newlyAllMastered = true
-
         }
     }
 
@@ -452,7 +462,6 @@ class AdaptiveEngine {
     }
 
     private fun logUCBValues(zpd: List<Int>, selected: Int) {
-        // Compute UCB for all active arms before logging
         val activeNodes = zpd.filter { bandit.hasArm(it) }
         for (kcId in activeNodes) {
             val node = bandit.getNode(kcId)
@@ -545,10 +554,6 @@ class AdaptiveEngine {
             return c
         }
 
-        /**
-         * Safely generates a pair matching [predicate], falling back to the
-         * last-generated pair after MAX_GEN_ATTEMPTS to prevent infinite loops.
-         */
         fun safePair(gen: () -> Pair<Int, Int>, predicate: (Int, Int) -> Boolean): Pair<Int, Int> {
             var a: Int; var b: Int; var attempts = 0
             do {
