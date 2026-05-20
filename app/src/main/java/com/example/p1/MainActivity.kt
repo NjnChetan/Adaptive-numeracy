@@ -374,7 +374,6 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val activeConcepts = engine.activeConceptsNames
                 val currentConcept = engine.currentKCName
 
                 withContext(Dispatchers.Main) {
@@ -384,37 +383,20 @@ class MainActivity : AppCompatActivity() {
                     scoreText?.text = loc("Q: ${total + 1}")
 
                     conceptsContainer?.removeAllViews()
-                    activeConcepts.forEachIndexed { index, conceptName ->
-                        val tv = TextView(this@MainActivity).apply {
-                            text = loc(conceptName)
-                            textSize = 14f
-                            setTypeface(null, Typeface.BOLD)
-                            setPadding(12, 4, 12, 4)
-                            if (conceptName == currentConcept) {
-                                setTextColor(Color.parseColor("#2B3A8C"))
-                                background = GradientDrawable().apply {
-                                    shape = GradientDrawable.RECTANGLE
-                                    cornerRadius = 8f
-                                    setStroke(4, Color.parseColor("#2B3A8C"))
-                                    setColor(Color.TRANSPARENT)
-                                }
-                            } else {
-                                setTextColor(Color.parseColor("#8A99CC"))
-                            }
-                        }
-                        conceptsContainer?.addView(tv)
-
-                        if (index < activeConcepts.size - 1) {
-                            val comma = TextView(this@MainActivity).apply {
-                                text = ","
-                                textSize = 14f
-                                setTypeface(null, Typeface.BOLD)
-                                setTextColor(Color.parseColor("#8A99CC"))
-                                setPadding(0, 4, 8, 4)
-                            }
-                            conceptsContainer?.addView(comma)
+                    val tv = TextView(this@MainActivity).apply {
+                        text = loc(currentConcept)
+                        textSize = 14f
+                        setTypeface(null, Typeface.BOLD)
+                        setPadding(12, 4, 12, 4)
+                        setTextColor(Color.parseColor("#2B3A8C"))
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE
+                            cornerRadius = 8f
+                            setStroke(4, Color.parseColor("#2B3A8C"))
+                            setColor(Color.TRANSPARENT)
                         }
                     }
+                    conceptsContainer?.addView(tv)
 
                     answerButtons.forEachIndexed { i, btn ->
                         val label = loc(answers[i].toString())
