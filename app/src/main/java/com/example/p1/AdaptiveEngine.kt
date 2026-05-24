@@ -73,7 +73,7 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
-        currentPhase = Phase.ASSESSMENT
+        currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
         student.reset()
         assessmentAnswers.clear()
@@ -589,3 +589,8 @@ class AdaptiveEngine {
         }
     }
 }
+
+
+
+
+
