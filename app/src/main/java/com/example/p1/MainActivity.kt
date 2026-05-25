@@ -79,6 +79,54 @@ class MainActivity : AppCompatActivity() {
         val btnMul     = panel.findViewById<MaterialButton>(R.id.btnMul)   ?: return
         val btnDiv     = panel.findViewById<MaterialButton>(R.id.btnDiv)   ?: return
         val startBtn   = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
+        val opGrid     = panel.findViewById<android.widget.LinearLayout>(R.id.opGrid)
+
+        // Set op grid layout based on orientation: portrait=2x2, landscape=1x4
+        fun applyOpGridOrientation() {
+            val isLandscape = resources.configuration.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            if (isLandscape) {
+                // 1x4 horizontal row
+                opGrid?.removeAllViews()
+                opGrid?.orientation = android.widget.LinearLayout.HORIZONTAL
+                listOf(btnAdd, btnSub, btnMul, btnDiv).forEach { btn ->
+                    (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                    btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also {
+                        it.setMargins(4, 4, 4, 4)
+                    }
+                    opGrid?.addView(btn)
+                }
+            } else {
+                // 2x2 grid
+                opGrid?.removeAllViews()
+                opGrid?.orientation = android.widget.LinearLayout.VERTICAL
+                val row1 = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    layoutParams = android.widget.LinearLayout.LayoutParams(-1, -2)
+                }
+                val row2 = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    layoutParams = android.widget.LinearLayout.LayoutParams(-1, -2)
+                }
+                listOf(btnAdd, btnSub).forEach { btn ->
+                    (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                    btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also {
+                        it.setMargins(4, 4, 4, 4)
+                    }
+                    row1.addView(btn)
+                }
+                listOf(btnMul, btnDiv).forEach { btn ->
+                    (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                    btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also {
+                        it.setMargins(4, 4, 4, 4)
+                    }
+                    row2.addView(btn)
+                }
+                opGrid?.addView(row1)
+                opGrid?.addView(row2)
+            }
+        }
+        applyOpGridOrientation()
 
         val scoreText    = panel.findViewById<TextView>(R.id.scoreText)
         val conceptsContainer = panel.findViewById<android.widget.LinearLayout>(R.id.conceptsContainer)
@@ -166,14 +214,14 @@ class MainActivity : AppCompatActivity() {
             val opTitle = panel.findViewById<TextView>(R.id.opTitle)
             val homeNavRotate = panel.findViewById<TextView>(R.id.homeNavRotate)
             val summaryNavHome = panel.findViewById<TextView>(R.id.summaryNavHome)
-            
+
             levelTitle?.text = loc("Select Level")
             opTitle?.text = loc("Select Operation")
             startBtn.text = loc("Start")
             homeNavRotate?.text = loc("⟳ Rotate")
             finishBtn?.text = loc("Finish")
             summaryNavHome?.text = loc("⌂ Home")
-            
+
             panel.findViewById<TextView>(R.id.summaryScoreTitle)?.text = loc("Score")
             panel.findViewById<TextView>(R.id.summaryCorrectTitle)?.text = loc("Correct")
             panel.findViewById<TextView>(R.id.summaryIncorrectTitle)?.text = loc("Incorrect")
@@ -181,8 +229,8 @@ class MainActivity : AppCompatActivity() {
             panel.findViewById<TextView>(R.id.summaryExcellentText)?.text = loc("Excellent performance!")
         }
 
-        langToggle?.setOnCheckedChangeListener { _, checked -> 
-            isMarathi = checked 
+        langToggle?.setOnCheckedChangeListener { _, checked ->
+            isMarathi = checked
             updateStaticTexts()
         }
 
@@ -317,7 +365,7 @@ class MainActivity : AppCompatActivity() {
             cardBorder?.background = normalBorder
             questionText.setTextColor(Color.parseColor("#2B3A8C"))
             questionText.text = loc(" Mastered!")
-            
+
             lifecycleScope.launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(2000)
                 showSummary()
@@ -484,7 +532,7 @@ class MainActivity : AppCompatActivity() {
         startBtn.setOnClickListener {
             if (selectedOp == null) return@setOnClickListener
             engine.startSession(selectedOp!!, selectedDigitMode ?: 1)
-            
+
             // Start CSV logging session
             sessionLogger.startSession()
             val lang = if (isMarathi) "Marathi" else "English"
@@ -573,6 +621,43 @@ class MainActivity : AppCompatActivity() {
                 rotationStep = if (h > w) { if (rotationStep == 0) 2 else 0 } else (rotationStep + 1) % 4
                 cumulativeDeg += 90f
                 clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
+            }
+            // portrait steps: 0,2 (panel is upright); landscape steps: 1,3
+            val panelIsLandscape = (rotationStep == 1 || rotationStep == 3)
+            val effectivelyLandscape = if (isPhone) false else panelIsLandscape
+            opGrid?.post {
+                if (effectivelyLandscape) {
+                    opGrid.removeAllViews()
+                    opGrid.orientation = android.widget.LinearLayout.HORIZONTAL
+                    listOf(btnAdd, btnSub, btnMul, btnDiv).forEach { btn ->
+                        (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                        btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also { it.setMargins(4,4,4,4) }
+                        opGrid.addView(btn)
+                    }
+                } else {
+                    opGrid.removeAllViews()
+                    opGrid.orientation = android.widget.LinearLayout.VERTICAL
+                    val row1 = android.widget.LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        layoutParams = android.widget.LinearLayout.LayoutParams(-1, -2)
+                    }
+                    val row2 = android.widget.LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        layoutParams = android.widget.LinearLayout.LayoutParams(-1, -2)
+                    }
+                    listOf(btnAdd, btnSub).forEach { btn ->
+                        (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                        btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also { it.setMargins(4,4,4,4) }
+                        row1.addView(btn)
+                    }
+                    listOf(btnMul, btnDiv).forEach { btn ->
+                        (btn.parent as? android.view.ViewGroup)?.removeView(btn)
+                        btn.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).also { it.setMargins(4,4,4,4) }
+                        row2.addView(btn)
+                    }
+                    opGrid.addView(row1)
+                    opGrid.addView(row2)
+                }
             }
         }
 
