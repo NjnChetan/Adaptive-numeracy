@@ -11,8 +11,9 @@ class AdaptiveEngine {
 
     val student = StudentModel()
 
-    private val fpr  = 0.00009
-    private val beta = CUSUMDetector.thresholdFromFPR(fpr)  // ≈ 9.32
+    private val fpr       = 0.00009
+    private val beta      = CUSUMDetector.thresholdFromFPR(fpr)       // ≈ 9.32 — learning phase
+    private val betaAssess = CUSUMDetector.thresholdFromFPR(0.05)     // ≈ 3.0  — assessment (faster)
 
     private val bandit         = KLUCBBandit()
     private val cusumDetectors = mutableMapOf<Int, CUSUMDetector>()
@@ -67,6 +68,8 @@ class AdaptiveEngine {
         Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
         bandit.clearAll()
         cusumDetectors.clear()
+        assessmentCusum.clear()
+        assessmentWrong = 0
         ts = 0
         detectionQuestionNo = 0
         practiceQuestionNo = 0
@@ -76,8 +79,6 @@ class AdaptiveEngine {
         currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
         student.reset()
-        assessmentAnswers.clear()
-        assessmentNodeDecided = false
         initZPD()
     }
 
@@ -119,19 +120,12 @@ class AdaptiveEngine {
             return filterIds.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
         }
 
-    // ── Assessment state ──────────────────────────────────────────────────
-    private val assessmentAnswers = mutableMapOf<Int, MutableList<Boolean>>()
-    private var assessmentNodeDecided = false
-
     init { initZPD() }
 
     private fun initZPD() {
         kcAncestors.clear()
         val filterIds = activeKCIds()
-        val initZpd = if (digitMode == 1)
-            filterIds.filter { !student.isMastered(it) }
-        else
-            KnowledgeRepository.getZPD(student, filterIds)
+        val initZpd = KnowledgeRepository.getZPD(student, filterIds)
 
         Log.i(TAG, "── initZPD() ──")
         Log.i(TAG, "  filterIds = $filterIds")
@@ -191,20 +185,44 @@ class AdaptiveEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 2-question assessment rule
+    // Assessment CUSUM — one detector per node being assessed.
+    // Pass  = CUSUM fires (mastery threshold reached).
+    // Fail  = consecutiveWrong hits frustrationLimit on this node.
     // ─────────────────────────────────────────────────────────────────────────
-    private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
-        val answers = assessmentAnswers.getOrPut(kcId) { mutableListOf() }
-        answers.add(correct)
+    private val assessmentCusum   = mutableMapOf<Int, CUSUMDetector>()
+    private var assessmentWrong   = 0   // consecutive wrong for current assessment node
 
-        Log.d(TAG, "[ASSESS KC $kcId] Q${answers.size}: ${if (correct) "✓" else "✗"}")
-
-        return when {
-            answers.size == 1 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q1 wrong)"); false }
-            answers.size == 2 && correct  -> { Log.d(TAG, "[ASSESS KC $kcId] → PASS (Q1+Q2 correct)"); true }
-            answers.size == 2 && !correct -> { Log.d(TAG, "[ASSESS KC $kcId] → FAIL (Q2 wrong)"); false }
-            else -> null
+    private fun getOrCreateAssessmentCusum(kcId: Int): CUSUMDetector {
+        return assessmentCusum.getOrPut(kcId) {
+            val pg = KnowledgeRepository.getGuessProb(kcId)
+            val ps = KnowledgeRepository.getSlipProb(kcId)
+            CUSUMDetector(pg = pg, ps = ps, threshold = betaAssess)
         }
+    }
+
+    // Returns true = PASS, false = FAIL, null = still accumulating
+    private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
+        val cusum = getOrCreateAssessmentCusum(kcId)
+        val mastered = cusum.update(correct)
+        Log.d(TAG, "[ASSESS KC $kcId] ${if (correct) "✓" else "✗"}  CUSUM=${cusum.getStatistic()}")
+        if (mastered) {
+            assessmentCusum.remove(kcId)
+            assessmentWrong = 0
+            Log.d(TAG, "[ASSESS KC $kcId] → PASS (CUSUM mastery)")
+            return true
+        }
+        if (!correct) {
+            assessmentWrong++
+            if (assessmentWrong >= 3) {
+                assessmentCusum.remove(kcId)
+                assessmentWrong = 0
+                Log.d(TAG, "[ASSESS KC $kcId] → FAIL (3 wrong)")
+                return false
+            }
+        } else {
+            assessmentWrong = 0
+        }
+        return null  // keep asking this node
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -220,10 +238,7 @@ class AdaptiveEngine {
 
     private fun generateLearningQuestion(): Pair<String, List<Int>> {
         val filterIds = activeKCIds()
-        val zpd = if (digitMode == 1)
-            filterIds.filter { !student.isMastered(it) }
-        else
-            KnowledgeRepository.getZPD(student, filterIds)
+        val zpd = KnowledgeRepository.getZPD(student, filterIds)
 
         Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it})" }}")
         Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
@@ -266,7 +281,6 @@ class AdaptiveEngine {
             is BoundaryAssessmentEngine.BoundaryState.Ask -> {
                 val kcId = BoundaryAssessmentEngine.NODE_TO_ID[state.nodeName] ?: 1
                 currentKC = kcId
-                assessmentNodeDecided = false
                 Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${state.nodeName}) | path='$assessmentResponseString'")
 
 
@@ -305,19 +319,11 @@ class AdaptiveEngine {
         ts++
 
         if (currentPhase == Phase.ASSESSMENT) {
-            if (assessmentNodeDecided) {
-                return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
-            }
-
             val decision = updateAssessmentNode(currentKC, isCorrect)
 
             if (decision != null) {
-                assessmentNodeDecided = true
-                assessmentAnswers.remove(currentKC)
-
                 assessmentResponseString += if (decision) "1" else "0"
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
-
 
                 val nextState = getNextAssessmentState(assessmentResponseString)
                 if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
@@ -363,7 +369,20 @@ class AdaptiveEngine {
 
         newlyFoundBoundary = terminal.boundary
 
-        for (nodeName in terminal.solvable) {
+        val solvableIds = terminal.solvable.mapNotNull { BoundaryAssessmentEngine.NODE_TO_ID[it] }.toSet()
+
+        // Pre-master solvable-minus-boundary (clearly already known).
+        // Also pre-master boundary KCs whose ALL prereqs are in solvable —
+        // those are transitively proven by the assessment (e.g. passed 2A1 → 1A is proven).
+        val filterIds = activeKCIds()
+        val toPremaster = terminal.solvable.filter { nodeName ->
+            val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName] ?: return@filter false
+            if (nodeName !in terminal.boundary) return@filter true   // solvable - boundary: always premaster
+            // boundary KC: premaster only if all its prereqs are in solvable
+            val prereqs = KnowledgeRepository.getPrerequisites(kcId).filter { it in filterIds }
+            prereqs.all { it in solvableIds }
+        }
+        for (nodeName in toPremaster) {
             val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName]
             if (kcId != null) {
                 student.setMastered(kcId)
@@ -375,8 +394,6 @@ class AdaptiveEngine {
         currentPhase = Phase.LEARNING
         initZPD()
 
-        // If the assessment itself proved all KCs are mastered, signal immediately
-        val filterIds = activeKCIds()
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
             newlyAllMastered = true
@@ -589,8 +606,3 @@ class AdaptiveEngine {
         }
     }
 }
-
-
-
-
-
