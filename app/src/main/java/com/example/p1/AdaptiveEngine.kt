@@ -68,8 +68,6 @@ class AdaptiveEngine {
         Log.i(TAG, "Operation: $op | DigitMode: $digitMode")
         bandit.clearAll()
         cusumDetectors.clear()
-        assessmentCusum.clear()
-        assessmentWrong = 0
         ts = 0
         detectionQuestionNo = 0
         practiceQuestionNo = 0
@@ -109,7 +107,7 @@ class AdaptiveEngine {
     var lastNum1: Int = 0; private set
     var lastNum2: Int = 0; private set
     var lastQuestionText: String = ""; private set
-    val currentKCName: String get() = BoundaryAssessmentEngine.ID_TO_NODE[currentKC] ?: "$currentKC"
+    val currentKCName: String get() = BoundaryDetector.ID_TO_NODE[currentKC] ?: "$currentKC"
     val currentKCId: Int get() = currentKC
     var detectionQuestionNo: Int = 0; private set
     var practiceQuestionNo: Int = 0; private set
@@ -117,7 +115,24 @@ class AdaptiveEngine {
     val activeConceptsNames: List<String>
         get() {
             val filterIds = activeKCIds()
-            return filterIds.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
+            return filterIds.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
+        }
+
+    /** Returns the short names of concepts currently in the ZPD (unlocked but not mastered). */
+    val currentZpdNames: List<String>
+        get() {
+            val filterIds = activeKCIds()
+            val zpd = KnowledgeRepository.getZPD(student, filterIds)
+            return zpd.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
+        }
+
+    /** Returns the short names of concepts already mastered in this session. */
+    val masteredConceptNames: Set<String>
+        get() {
+            val filterIds = activeKCIds()
+            return filterIds.filter { student.isMastered(it) }
+                .map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
+                .toSet()
         }
 
     init { initZPD() }
@@ -174,55 +189,24 @@ class AdaptiveEngine {
         }
     }
 
-    // ── Pick next assessment state based on digitMode ─────────────────────────
-    private fun getNextAssessmentState(responseString: String): BoundaryAssessmentEngine.BoundaryState? {
+    // ── Pick next assessment state ─────────────────────────
+    private fun getNextAssessmentState(responseString: String): BoundaryState {
         val isAddition = operationType == "+"
-        return when (digitMode) {
-            1    -> BoundaryAssessmentEngine.getNextStateLevel1(responseString, isAddition)
-            2    -> BoundaryAssessmentEngine.getNextStateLevel2(responseString, isAddition)
-            else -> BoundaryAssessmentEngine.getNextState(responseString, isAddition)
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Assessment CUSUM — one detector per node being assessed.
-    // Pass  = CUSUM fires (mastery threshold reached).
-    // Fail  = consecutiveWrong hits frustrationLimit on this node.
-    // ─────────────────────────────────────────────────────────────────────────
-    private val assessmentCusum   = mutableMapOf<Int, CUSUMDetector>()
-    private var assessmentWrong   = 0   // consecutive wrong for current assessment node
-
-    private fun getOrCreateAssessmentCusum(kcId: Int): CUSUMDetector {
-        return assessmentCusum.getOrPut(kcId) {
-            val pg = KnowledgeRepository.getGuessProb(kcId)
-            val ps = KnowledgeRepository.getSlipProb(kcId)
-            CUSUMDetector(pg = pg, ps = ps, threshold = betaAssess)
-        }
-    }
-
-    // Returns true = PASS, false = FAIL, null = still accumulating
-    private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
-        val cusum = getOrCreateAssessmentCusum(kcId)
-        val mastered = cusum.update(correct)
-        Log.d(TAG, "[ASSESS KC $kcId] ${if (correct) "✓" else "✗"}  CUSUM=${cusum.getStatistic()}")
-        if (mastered) {
-            assessmentCusum.remove(kcId)
-            assessmentWrong = 0
-            Log.d(TAG, "[ASSESS KC $kcId] → PASS (CUSUM mastery)")
-            return true
-        }
-        if (!correct) {
-            assessmentWrong++
-            if (assessmentWrong >= 3) {
-                assessmentCusum.remove(kcId)
-                assessmentWrong = 0
-                Log.d(TAG, "[ASSESS KC $kcId] → FAIL (3 wrong)")
-                return false
-            }
+        return if (isAddition) {
+            BoundaryDetector.getAdditionState(responseString)
         } else {
-            assessmentWrong = 0
+            BoundaryDetector.getSubtractionState(responseString)
         }
-        return null  // keep asking this node
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Assessment — exactly 1 question per node as per Python algorithm
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Returns true = PASS, false = FAIL
+    private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
+        Log.d(TAG, "[ASSESS KC $kcId] single question response: ${if (correct) "1 (PASS)" else "0 (FAIL)"}")
+        return correct
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -240,8 +224,8 @@ class AdaptiveEngine {
         val filterIds = activeKCIds()
         val zpd = KnowledgeRepository.getZPD(student, filterIds)
 
-        Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it})" }}")
-        Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+        Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryDetector.ID_TO_NODE[it] ?: it})" }}")
+        Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
 
 
         for (kcId in zpd) addArmIfNeeded(kcId)
@@ -278,10 +262,10 @@ class AdaptiveEngine {
 
     private fun generateAssessmentQuestion(): Pair<String, List<Int>> =
         when (val state = getNextAssessmentState(assessmentResponseString)) {
-            is BoundaryAssessmentEngine.BoundaryState.Ask -> {
-                val kcId = BoundaryAssessmentEngine.NODE_TO_ID[state.nodeName] ?: 1
+            is BoundaryState.Ask -> {
+                val kcId = state.kcId
                 currentKC = kcId
-                Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${state.nodeName}) | path='$assessmentResponseString'")
+                Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${BoundaryDetector.ID_TO_NODE[kcId]}) | path='$assessmentResponseString'")
 
 
                 detectionQuestionNo++
@@ -299,14 +283,9 @@ class AdaptiveEngine {
 
                 Pair(question, options)
             }
-            is BoundaryAssessmentEngine.BoundaryState.Terminal -> {
+            is BoundaryState.Terminal -> {
                 handleTerminalAssessment(state)
                 currentPhase = Phase.LEARNING
-                generateLearningQuestion()
-            }
-            else -> {
-                currentPhase = Phase.LEARNING
-                initZPD()
                 generateLearningQuestion()
             }
         }
@@ -326,7 +305,7 @@ class AdaptiveEngine {
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
                 val nextState = getNextAssessmentState(assessmentResponseString)
-                if (nextState is BoundaryAssessmentEngine.BoundaryState.Terminal) {
+                if (nextState is BoundaryState.Terminal) {
                     handleTerminalAssessment(nextState)
                     currentPhase = Phase.LEARNING
                 }
@@ -362,33 +341,29 @@ class AdaptiveEngine {
         return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
     }
 
-    private fun handleTerminalAssessment(terminal: BoundaryAssessmentEngine.BoundaryState.Terminal) {
+    private fun handleTerminalAssessment(terminal: BoundaryState.Terminal) {
         Log.i(TAG, "── Assessment Terminal State reached ──")
         Log.i(TAG, "  Solvable: ${terminal.solvable}")
         Log.i(TAG, "  Boundary (Current Level): ${terminal.boundary}")
 
-        newlyFoundBoundary = terminal.boundary
+        newlyFoundBoundary = terminal.boundary.mapNotNull { BoundaryDetector.ID_TO_NODE[it] }.toSet()
 
-        val solvableIds = terminal.solvable.mapNotNull { BoundaryAssessmentEngine.NODE_TO_ID[it] }.toSet()
+        val solvableIds = terminal.solvable
 
         // Pre-master solvable-minus-boundary (clearly already known).
         // Also pre-master boundary KCs whose ALL prereqs are in solvable —
         // those are transitively proven by the assessment (e.g. passed 2A1 → 1A is proven).
         val filterIds = activeKCIds()
-        val toPremaster = terminal.solvable.filter { nodeName ->
-            val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName] ?: return@filter false
-            if (nodeName !in terminal.boundary) return@filter true   // solvable - boundary: always premaster
+        val toPremaster = terminal.solvable.filter { kcId ->
+            if (kcId !in terminal.boundary) return@filter true   // solvable - boundary: always premaster
             // boundary KC: premaster only if all its prereqs are in solvable
             val prereqs = KnowledgeRepository.getPrerequisites(kcId).filter { it in filterIds }
             prereqs.all { it in solvableIds }
         }
-        for (nodeName in toPremaster) {
-            val kcId = BoundaryAssessmentEngine.NODE_TO_ID[nodeName]
-            if (kcId != null) {
-                student.setMastered(kcId)
-                bandit.removeArm(kcId)
-                cusumDetectors.remove(kcId)
-            }
+        for (kcId in toPremaster) {
+            student.setMastered(kcId)
+            bandit.removeArm(kcId)
+            cusumDetectors.remove(kcId)
         }
 
         currentPhase = Phase.LEARNING
@@ -406,7 +381,7 @@ class AdaptiveEngine {
     private fun onMastery(kcId: Int) {
         // Save correctness record before removing detector
         val record = cusumDetectors[kcId]?.correctnessRecord?.toList() ?: emptyList()
-        val conceptName = BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: "$kcId"
+        val conceptName = BoundaryDetector.ID_TO_NODE[kcId] ?: "$kcId"
         lastMasteryEvent = MasteryEvent(kcId, conceptName, record)
 
         student.setMastered(kcId)
@@ -430,8 +405,8 @@ class AdaptiveEngine {
                 .filter { it in filterIds }
             val allPrereqsMet = prereqs.all { student.isMastered(it) }
             if (!allPrereqsMet) {
-                Log.d(TAG, "  KC $childKc (${BoundaryAssessmentEngine.ID_TO_NODE[childKc]}) still locked: " +
-                        "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+                Log.d(TAG, "  KC $childKc (${BoundaryDetector.ID_TO_NODE[childKc]}) still locked: " +
+                        "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
                 continue
             }
             if (!student.isMastered(childKc)) {
@@ -440,16 +415,16 @@ class AdaptiveEngine {
             }
         }
         if (unlockedKCs.isNotEmpty()) {
-            Log.d(TAG, "Unlocked KCs into ZPD: ${unlockedKCs.map { "$it(${BoundaryAssessmentEngine.ID_TO_NODE[it]})" }}")
-            lastZpdUpdate = unlockedKCs.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }
+            Log.d(TAG, "Unlocked KCs into ZPD: ${unlockedKCs.map { "$it(${BoundaryDetector.ID_TO_NODE[it]})" }}")
+            lastZpdUpdate = unlockedKCs.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
         val newZpd = KnowledgeRepository.getZPD(student, filterIds)
         for (newKc in newZpd) addArmIfNeeded(newKc)
 
-        Log.i(TAG, "  After mastery of ${BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: kcId}:")
-        Log.i(TAG, "  New ZPD = ${newZpd.map { "${BoundaryAssessmentEngine.ID_TO_NODE[it] ?: it}" }}")
-        Log.i(TAG, "  Mastered so far: ${filterIds.filter { student.isMastered(it) }.map { BoundaryAssessmentEngine.ID_TO_NODE[it] ?: "$it" }}")
+        Log.i(TAG, "  After mastery of ${BoundaryDetector.ID_TO_NODE[kcId] ?: kcId}:")
+        Log.i(TAG, "  New ZPD = ${newZpd.map { "${BoundaryDetector.ID_TO_NODE[it] ?: it}" }}")
+        Log.i(TAG, "  Mastered so far: ${filterIds.filter { student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
 
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 ALL KCs MASTERED for digitMode=$digitMode!")
@@ -490,7 +465,7 @@ class AdaptiveEngine {
         Log.i(TAG, "Qno: $practiceQuestionNo")
         for (kcId in zpd) {
             val node = bandit.getNode(kcId)
-            val name = BoundaryAssessmentEngine.ID_TO_NODE[kcId] ?: "$kcId"
+            val name = BoundaryDetector.ID_TO_NODE[kcId] ?: "$kcId"
             if (node != null) {
                 val mean = node.estimate.coerceIn(0.0, 1.0)
                 val ucb = node.ucb.coerceIn(0.0, 1.0)
@@ -499,7 +474,7 @@ class AdaptiveEngine {
                 Log.i(TAG, "  $name  mean: 0.00  ucb: 0.00 (no arm)")
             }
         }
-        val selName = BoundaryAssessmentEngine.ID_TO_NODE[selected] ?: "$selected"
+        val selName = BoundaryDetector.ID_TO_NODE[selected] ?: "$selected"
         Log.i(TAG, "Concept-selected: $selName")
     }
 

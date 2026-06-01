@@ -204,7 +204,17 @@ class MainActivity : AppCompatActivity() {
                 "\n\nPractice Starts" -> "\n\nसराव सुरू"
                 "✓ Good" -> "✓ छान"
                 "OK" -> "ठीक आहे"
-                else -> s
+                "🔍 Boundary Test" -> "🔍 सीमा चाचणी"
+                "Concept Mastered!" -> "संकल्पनेवर प्राविण्य मिळवले!"
+                else -> {
+                    if (s.startsWith("You mastered ")) {
+                        val part = s.substring("You mastered ".length)
+                        val conceptAndRest = part.split("!\\n")
+                        if (conceptAndRest.size == 2) {
+                            "तुम्ही ${conceptAndRest[0]} वर प्राविण्य मिळवले!\nपुढच्या संकल्पनेकडे जात आहे..."
+                        } else s
+                    } else s
+                }
             }
             return toMarathi(translated)
         }
@@ -423,6 +433,17 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val currentConcept = engine.currentKCName
+                val isAssessmentPhase = engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT
+                val masteredSet = engine.masteredConceptNames
+                val zpdNames = engine.currentZpdNames
+
+                // During assessment: show only the concept being assessed (highlighted)
+                // During learning: show ZPD concepts + already mastered ones
+                val visibleConcepts = if (isAssessmentPhase) {
+                    listOf(currentConcept)
+                } else {
+                    masteredSet.toList().sorted() + zpdNames.filter { it !in masteredSet }
+                }
 
                 withContext(Dispatchers.Main) {
                     cardBorder?.background = normalBorder
@@ -431,20 +452,109 @@ class MainActivity : AppCompatActivity() {
                     scoreText?.text = loc("Q: ${total + 1}")
 
                     conceptsContainer?.removeAllViews()
-                    val tv = TextView(this@MainActivity).apply {
-                        text = loc(currentConcept)
-                        textSize = 14f
-                        setTypeface(null, Typeface.BOLD)
-                        setPadding(12, 4, 12, 4)
-                        setTextColor(Color.parseColor("#2B3A8C"))
-                        background = GradientDrawable().apply {
-                            shape = GradientDrawable.RECTANGLE
-                            cornerRadius = 8f
-                            setStroke(4, Color.parseColor("#2B3A8C"))
-                            setColor(Color.TRANSPARENT)
+
+                    if (isAssessmentPhase) {
+                        // ── Modern "Boundary Test" badge during assessment ──
+                        val badgeContainer = android.widget.LinearLayout(this@MainActivity).apply {
+                            orientation = android.widget.LinearLayout.HORIZONTAL
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                            setPadding(10, 4, 10, 4)
+                            background = GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = 12f
+                                setColor(Color.parseColor("#EDE7F6"))
+                                setStroke(1, Color.parseColor("#B39DDB"))
+                            }
+                            val lp = android.widget.LinearLayout.LayoutParams(
+                                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            lp.setMargins(2, 0, 2, 0)
+                            layoutParams = lp
+                        }
+
+                        // "🔍 Boundary Test" label
+                        val testLabel = TextView(this@MainActivity).apply {
+                            text = loc("🔍 Boundary Test")
+                            textSize = 9f
+                            setTypeface(null, Typeface.BOLD)
+                            setTextColor(Color.parseColor("#5E35B1"))
+                            setPadding(0, 0, 6, 0)
+                        }
+                        badgeContainer.addView(testLabel)
+
+                        // Separator dot
+                        val dot = TextView(this@MainActivity).apply {
+                            text = "•"
+                            textSize = 9f
+                            setTextColor(Color.parseColor("#B39DDB"))
+                            setPadding(0, 0, 6, 0)
+                        }
+                        badgeContainer.addView(dot)
+
+                        // Concept name chip
+                        val conceptChip = TextView(this@MainActivity).apply {
+                            text = loc(currentConcept)
+                            textSize = 9f
+                            setTypeface(null, Typeface.BOLD)
+                            setTextColor(Color.WHITE)
+                            setPadding(8, 2, 8, 2)
+                            background = GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = 8f
+                                setColor(Color.parseColor("#7E57C2"))
+                            }
+                        }
+                        badgeContainer.addView(conceptChip)
+
+                        conceptsContainer?.addView(badgeContainer)
+                    } else {
+                        // ── Learning phase: show ZPD + mastered concepts ──
+                        for (name in visibleConcepts) {
+                            val isCurrent = (name == currentConcept)
+                            val isMastered = (name in masteredSet)
+                            val tv = TextView(this@MainActivity).apply {
+                                text = if (isMastered) loc("✓$name") else loc(name)
+                                textSize = 10f
+                                setTypeface(null, Typeface.BOLD)
+                                setPadding(8, 3, 8, 3)
+                                when {
+                                    isCurrent -> {
+                                        setTextColor(Color.WHITE)
+                                        background = GradientDrawable().apply {
+                                            shape = GradientDrawable.RECTANGLE
+                                            cornerRadius = 8f
+                                            setColor(Color.parseColor("#2B3A8C"))
+                                        }
+                                    }
+                                    isMastered -> {
+                                        setTextColor(Color.parseColor("#2E7D32"))
+                                        background = GradientDrawable().apply {
+                                            shape = GradientDrawable.RECTANGLE
+                                            cornerRadius = 8f
+                                            setColor(Color.parseColor("#E8F5E9"))
+                                        }
+                                    }
+                                    else -> {
+                                        setTextColor(Color.parseColor("#B0B8D0"))
+                                        background = GradientDrawable().apply {
+                                            shape = GradientDrawable.RECTANGLE
+                                            cornerRadius = 8f
+                                            setStroke(1, Color.parseColor("#D8DCE8"))
+                                            setColor(Color.TRANSPARENT)
+                                        }
+                                    }
+                                }
+                                val lp = android.widget.LinearLayout.LayoutParams(
+                                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                                lp.setMargins(2, 0, 2, 0)
+                                layoutParams = lp
+                            }
+                            conceptsContainer?.addView(tv)
                         }
                     }
-                    conceptsContainer?.addView(tv)
 
                     answerButtons.forEachIndexed { i, btn ->
                         val label = loc(answers[i].toString())
@@ -475,9 +585,11 @@ class MainActivity : AppCompatActivity() {
                                 // submitAnswer on Default — it does CUSUM/BKT computation
                                 engine.submitAnswer(answers[i])
 
-                                // Track stats for summary
-                                val stats = conceptStats.getOrDefault(qKCName, Pair(0, 0))
-                                conceptStats[qKCName] = Pair(stats.first + (if (ok) 1 else 0), stats.second + 1)
+                                // Track stats for summary (practice only, skip assessment)
+                                if (!isAssessment) {
+                                    val stats = conceptStats.getOrDefault(qKCName, Pair(0, 0))
+                                    conceptStats[qKCName] = Pair(stats.first + (if (ok) 1 else 0), stats.second + 1)
+                                }
 
                                 // CSV logging (file I/O fine on Default)
                                 val misconception = if (!ok) {
@@ -491,9 +603,11 @@ class MainActivity : AppCompatActivity() {
                                 }
 
                                 // Consume events — all on Default (safe, no race)
+                                var newlyMasteredConcept: String? = null
                                 engine.consumeMasteryEvent()?.let { evt ->
                                     sessionLogger.logMastery(qNo, evt.conceptName, evt.correctnessRecord)
                                     masteredLevels.add(evt.conceptName)
+                                    newlyMasteredConcept = evt.conceptName
                                 }
                                 engine.consumeZpdUpdate()?.let { added ->
                                     sessionLogger.logZpdUpdate(added)
@@ -502,16 +616,20 @@ class MainActivity : AppCompatActivity() {
                                 // Check if all mastered
                                 if (engine.consumeAllMastered()) {
                                     withContext(Dispatchers.Main) {
-                                        total++
-                                        if (ok) correct++
+                                        if (!isAssessment) {
+                                            total++
+                                            if (ok) correct++
+                                        }
                                         showMastered()
                                     }
                                     return@launch
                                 }
                                 withContext(Dispatchers.Main) {
-                                    total++
+                                    if (!isAssessment) {
+                                        total++
+                                        if (ok) correct++
+                                    }
                                     if (ok) {
-                                        correct++
                                         cardBorder?.background = correctBorder
                                     } else {
                                         cardBorder?.background = wrongBorder
@@ -519,9 +637,31 @@ class MainActivity : AppCompatActivity() {
                                         questionText.setTextColor(Color.parseColor("#C62828"))
                                     }
                                 }
-                                kotlinx.coroutines.delay(900)
-                                // Switch to Main before calling loadQuestion() to reset the stack
-                                withContext(Dispatchers.Main) { loadQuestion() }
+                                
+                                if (newlyMasteredConcept != null) {
+                                    withContext(Dispatchers.Main) {
+                                        val overlay = panel.findViewById<android.widget.LinearLayout>(R.id.masteryOverlay)
+                                        val title = panel.findViewById<TextView>(R.id.masteryTitleText)
+                                        val msg = panel.findViewById<TextView>(R.id.masteryMessageText)
+                                        
+                                        title?.text = loc("Concept Mastered!")
+                                        msg?.text = loc("You mastered $newlyMasteredConcept!\nMoving to the next concept...")
+                                        
+                                        overlay?.alpha = 0f
+                                        overlay?.visibility = View.VISIBLE
+                                        overlay?.animate()?.alpha(1f)?.setDuration(300)?.start()
+                                    }
+                                    kotlinx.coroutines.delay(2500)
+                                    withContext(Dispatchers.Main) {
+                                        val overlay = panel.findViewById<android.widget.LinearLayout>(R.id.masteryOverlay)
+                                        overlay?.visibility = View.GONE
+                                        loadQuestion()
+                                    }
+                                } else {
+                                    kotlinx.coroutines.delay(900)
+                                    // Switch to Main before calling loadQuestion() to reset the stack
+                                    withContext(Dispatchers.Main) { loadQuestion() }
+                                }
                             }
                         }
                     }

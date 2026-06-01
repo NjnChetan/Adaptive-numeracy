@@ -5,7 +5,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.random.Random
 
-// ─────────────────────────────────────────────────────────────────────────────
+//─────────────────────────────────────────────────────────────────────────────
 // KLUCBNode
 //
 // Translated from Python class `KLUCB_Node2`:
