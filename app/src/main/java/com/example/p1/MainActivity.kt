@@ -206,15 +206,11 @@ class MainActivity : AppCompatActivity() {
                 "OK" -> "ठीक आहे"
                 "🔍 Boundary Test" -> "🔍 सीमा चाचणी"
                 "Concept Mastered!" -> "संकल्पनेवर प्राविण्य मिळवले!"
-                else -> {
-                    if (s.startsWith("You mastered ")) {
-                        val part = s.substring("You mastered ".length)
-                        val conceptAndRest = part.split("!\\n")
-                        if (conceptAndRest.size == 2) {
-                            "तुम्ही ${conceptAndRest[0]} वर प्राविण्य मिळवले!\nपुढच्या संकल्पनेकडे जात आहे..."
-                        } else s
-                    } else s
-                }
+                "Great Job!" -> "खूप छान!"
+                "You're making excellent progress." -> "तुम्ही उत्तम प्रगती करत आहात."
+                "Moving to the next concept." -> "पुढच्या संकल्पनेकडे जात आहे."
+                "\n\nLet's test what you know!" -> "\n\nचला, तुमचे ज्ञान तपासूया!"
+                else -> s
             }
             return toMarathi(translated)
         }
@@ -285,6 +281,8 @@ class MainActivity : AppCompatActivity() {
             circularProgressBar?.progress = perc
             summaryCorrectCount?.text = loc("$correct")
             summaryIncorrectCount?.text = loc("${total - correct}")
+            
+            panel.findViewById<TextView>(R.id.summaryExcellentText)?.visibility = View.GONE
 
             performanceContainer?.removeAllViews()
             val sortedConcepts = conceptStats.keys.sorted()
@@ -378,7 +376,21 @@ class MainActivity : AppCompatActivity() {
 
             lifecycleScope.launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(2000)
-                showSummary()
+                finish()
+            }
+        }
+
+        fun showSuperMastered() {
+            btnRow1?.visibility = View.GONE
+            btnRow2?.visibility = View.GONE
+            cardBorder?.background = normalBorder
+            questionText.setTextColor(Color.parseColor("#2E7D32"))
+            questionText.text = loc("Super! You have learned it all!")
+
+            lifecycleScope.launch(Dispatchers.Main) {
+                kotlinx.coroutines.delay(3000)
+                sessionLogger.endSession()
+                finish()
             }
         }
 
@@ -392,7 +404,9 @@ class MainActivity : AppCompatActivity() {
 
                 // ── All mastered ────────────────────────────────────────────
                 if (engine.consumeAllMastered()) {
-                    withContext(Dispatchers.Main) { showMastered() }
+                    withContext(Dispatchers.Main) {
+                        if (engine.assessmentProvedAllMastered) showSuperMastered() else showMastered()
+                    }
                     return@launch
                 }
 
@@ -404,7 +418,9 @@ class MainActivity : AppCompatActivity() {
                     sessionLogger.logKBoundary(boundary.toList())
 
                     if (engine.consumeAllMastered()) {
-                        withContext(Dispatchers.Main) { showMastered() }
+                        withContext(Dispatchers.Main) {
+                            if (engine.assessmentProvedAllMastered) showSuperMastered() else showMastered()
+                        }
                         return@launch
                     }
                     withContext(Dispatchers.Main) {
@@ -424,11 +440,28 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
+                if (engine.detectionQuestionNo == 0 && engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT) {
+                    withContext(Dispatchers.Main) {
+                        btnRow1?.visibility = View.GONE
+                        btnRow2?.visibility = View.GONE
+                        cardBorder?.background = normalBorder
+                        questionText.setTextColor(Color.parseColor("#2B3A8C"))
+                        questionText.text = loc("\n\nLet's test what you know!")
+                    }
+                    kotlinx.coroutines.delay(4000)
+                    withContext(Dispatchers.Main) {
+                        btnRow1?.visibility = View.VISIBLE
+                        btnRow2?.visibility = View.VISIBLE
+                    }
+                }
+
                 // ── Generate next question (already on Default) ────────────
                 val (question, answers) = engine.generateQuestion()
 
                 if (engine.consumeAllMastered()) {
-                    withContext(Dispatchers.Main) { showMastered() }
+                    withContext(Dispatchers.Main) {
+                        if (engine.assessmentProvedAllMastered) showSuperMastered() else showMastered()
+                    }
                     return@launch
                 }
 
@@ -620,7 +653,7 @@ class MainActivity : AppCompatActivity() {
                                             total++
                                             if (ok) correct++
                                         }
-                                        showMastered()
+                                        if (engine.assessmentProvedAllMastered) showSuperMastered() else showMastered()
                                     }
                                     return@launch
                                 }
@@ -640,20 +673,36 @@ class MainActivity : AppCompatActivity() {
                                 
                                 if (newlyMasteredConcept != null) {
                                     withContext(Dispatchers.Main) {
-                                        val overlay = panel.findViewById<android.widget.LinearLayout>(R.id.masteryOverlay)
+                                        val overlay = panel.findViewById<android.widget.FrameLayout>(R.id.masteryOverlay)
+                                        val card = panel.findViewById<android.widget.LinearLayout>(R.id.masteryCard)
                                         val title = panel.findViewById<TextView>(R.id.masteryTitleText)
-                                        val msg = panel.findViewById<TextView>(R.id.masteryMessageText)
+                                        val msg1 = panel.findViewById<TextView>(R.id.masteryMessageText1)
+                                        val msg2 = panel.findViewById<TextView>(R.id.masteryMessageText2)
                                         
-                                        title?.text = loc("Concept Mastered!")
-                                        msg?.text = loc("You mastered $newlyMasteredConcept!\nMoving to the next concept...")
+                                        title?.text = loc("Great Job!")
+                                        msg1?.text = loc("You're making excellent progress.")
+                                        msg2?.text = loc("Moving to the next concept.")
                                         
                                         overlay?.alpha = 0f
                                         overlay?.visibility = View.VISIBLE
                                         overlay?.animate()?.alpha(1f)?.setDuration(300)?.start()
+                                        
+                                        card?.alpha = 0f
+                                        card?.translationY = 80f
+                                        card?.scaleX = 0.95f
+                                        card?.scaleY = 0.95f
+                                        card?.animate()
+                                            ?.alpha(1f)
+                                            ?.translationY(0f)
+                                            ?.scaleX(1f)
+                                            ?.scaleY(1f)
+                                            ?.setInterpolator(android.view.animation.DecelerateInterpolator(1.5f))
+                                            ?.setDuration(400)
+                                            ?.start()
                                     }
                                     kotlinx.coroutines.delay(2500)
                                     withContext(Dispatchers.Main) {
-                                        val overlay = panel.findViewById<android.widget.LinearLayout>(R.id.masteryOverlay)
+                                        val overlay = panel.findViewById<android.widget.FrameLayout>(R.id.masteryOverlay)
                                         overlay?.visibility = View.GONE
                                         loadQuestion()
                                     }

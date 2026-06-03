@@ -26,6 +26,10 @@ class AdaptiveEngine {
         private set
     private var assessmentResponseString = ""
 
+    // ── Confirmation state: non-null means we are waiting for the 2nd
+    //    question on the same concept before committing a "1" to the path ──────
+    private var pendingConfirmKC: Int? = null
+
     var newlyFoundBoundary: Set<String>? = null
         private set
 
@@ -37,6 +41,9 @@ class AdaptiveEngine {
 
     // ── All-mastered signal (modes 1 & 2) ────────────────────────────────────
     var newlyAllMastered: Boolean = false
+        private set
+
+    var assessmentProvedAllMastered: Boolean = false
         private set
 
     fun consumeAllMastered(): Boolean {
@@ -74,8 +81,10 @@ class AdaptiveEngine {
         focusKC = null
         focusQuestionCount = 0
         consecutiveWrong = 0
+        pendingConfirmKC = null
         currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
+        assessmentProvedAllMastered = false
         student.reset()
         initZPD()
     }
@@ -200,13 +209,30 @@ class AdaptiveEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Assessment — exactly 1 question per node as per Python algorithm
+    // Assessment — 1 question per node, but a correct answer triggers a
+    // confirmation question on the same node.  Only two correct answers in a
+    // row appends "1"; any wrong answer appends "0" immediately.
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Returns true = PASS, false = FAIL
+    // Returns true = PASS (both questions correct), false = FAIL
     private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
-        Log.d(TAG, "[ASSESS KC $kcId] single question response: ${if (correct) "1 (PASS)" else "0 (FAIL)"}")
-        return correct
+        return if (pendingConfirmKC == kcId) {
+            // This is the confirmation question
+            pendingConfirmKC = null
+            Log.d(TAG, "[ASSESS KC $kcId] confirmation response: ${if (correct) "PASS" else "FAIL"}")
+            correct  // true → "1", false → "0"
+        } else {
+            // This is the first question
+            if (correct) {
+                // Don't commit yet — ask a second question to rule out a guess
+                pendingConfirmKC = kcId
+                Log.d(TAG, "[ASSESS KC $kcId] first answer correct — asking confirmation question")
+                null  // null = no path update yet, ask again
+            } else {
+                Log.d(TAG, "[ASSESS KC $kcId] first answer wrong — FAIL")
+                false  // commit "0" immediately
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -260,8 +286,30 @@ class AdaptiveEngine {
         return Pair(question, options)
     }
 
-    private fun generateAssessmentQuestion(): Pair<String, List<Int>> =
-        when (val state = getNextAssessmentState(assessmentResponseString)) {
+    private fun generateAssessmentQuestion(): Pair<String, List<Int>> {
+        // If we are waiting for a confirmation, re-ask the same concept
+        val confirmKC = pendingConfirmKC
+        if (confirmKC != null) {
+            currentKC = confirmKC
+            Log.i(TAG, "[ASSESSMENT] Confirmation question for KC $confirmKC (${BoundaryDetector.ID_TO_NODE[confirmKC]}) | path='$assessmentResponseString'")
+
+            detectionQuestionNo++
+            val (num1, num2) = generateNumbersForKC(currentKC)
+            lastNum1 = num1; lastNum2 = num2
+            val op = KnowledgeRepository.getOperationType(currentKC)
+            correctAnswer = if (op == "-") num1 - num2 else num1 + num2
+
+            val opSymbol = if (op == "-") "−" else "+"
+            val question = "$num1 $opSymbol $num2 = ?"
+            lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
+
+            val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
+            val options = (listOf(correctAnswer) + distractors).shuffled()
+
+            return Pair(question, options)
+        }
+
+        return when (val state = getNextAssessmentState(assessmentResponseString)) {
             is BoundaryState.Ask -> {
                 val kcId = state.kcId
                 currentKC = kcId
@@ -289,6 +337,7 @@ class AdaptiveEngine {
                 generateLearningQuestion()
             }
         }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // submitAnswer
@@ -301,6 +350,8 @@ class AdaptiveEngine {
             val decision = updateAssessmentNode(currentKC, isCorrect)
 
             if (decision != null) {
+                // decision == true  → both questions answered correctly → "1"
+                // decision == false → a wrong answer was given           → "0"
                 assessmentResponseString += if (decision) "1" else "0"
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
@@ -310,6 +361,7 @@ class AdaptiveEngine {
                     currentPhase = Phase.LEARNING
                 }
             }
+            // decision == null → waiting for confirmation; path unchanged
 
             return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
         }
@@ -372,6 +424,7 @@ class AdaptiveEngine {
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
             newlyAllMastered = true
+            assessmentProvedAllMastered = true
         }
     }
 
@@ -436,15 +489,6 @@ class AdaptiveEngine {
     // chooseKC
     // ─────────────────────────────────────────────────────────────────────────
     private fun chooseKC(zpd: List<Int>): Int {
-        val focus = focusKC
-        if (focus != null &&
-            focusKC in zpd &&
-            bandit.hasArm(focus) &&
-            focusQuestionCount < minFocus) {
-            focusQuestionCount++
-            logUCBValues(zpd, focus)
-            return focus
-        }
         val selected       = bandit.selectConcept(zpd, practiceQuestionNo)
         focusKC            = selected
         focusQuestionCount = 1
