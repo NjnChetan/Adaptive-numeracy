@@ -7,13 +7,10 @@ class AdaptiveEngine {
 
     private val TAG = "AdaptiveSystem"
 
-
-
     val student = StudentModel()
 
-    private val fpr       = 0.00009
-    private val beta      = CUSUMDetector.thresholdFromFPR(fpr)       // ≈ 9.32 — learning phase
-    private val betaAssess = CUSUMDetector.thresholdFromFPR(0.05)     // ≈ 3.0  — assessment (faster)
+    private val fpr   = 0.00009
+    private val beta  = CUSUMDetector.thresholdFromFPR(fpr)  // ≈ 9.32
 
     private val bandit         = KLUCBBandit()
     private val cusumDetectors = mutableMapOf<Int, CUSUMDetector>()
@@ -26,8 +23,12 @@ class AdaptiveEngine {
         private set
     private var assessmentResponseString = ""
 
-    // ── Confirmation state: non-null means we are waiting for the 2nd
-    //    question on the same concept before committing a "1" to the path ──────
+    // FIX (Issue 3): Guard flag — prevents handleTerminalAssessment() from
+    // being called twice (once from submitAnswer and once from
+    // generateAssessmentQuestion when it sees the same Terminal state).
+    private var terminalHandled = false
+
+    // ── Confirmation state ────────────────────────────────────────────────────
     private var pendingConfirmKC: Int? = null
 
     var newlyFoundBoundary: Set<String>? = null
@@ -39,7 +40,6 @@ class AdaptiveEngine {
         return b
     }
 
-    // ── All-mastered signal (modes 1 & 2) ────────────────────────────────────
     var newlyAllMastered: Boolean = false
         private set
 
@@ -52,20 +52,14 @@ class AdaptiveEngine {
         return v
     }
 
-    // ── Mastery event (for CSV logging) ────────────────────────────────
     data class MasteryEvent(val kcId: Int, val conceptName: String, val correctnessRecord: List<Boolean>)
     var lastMasteryEvent: MasteryEvent? = null; private set
     fun consumeMasteryEvent(): MasteryEvent? { val e = lastMasteryEvent; lastMasteryEvent = null; return e }
 
-    // ── ZPD-update event (for CSV logging) ─────────────────────────────
     var lastZpdUpdate: List<String>? = null; private set
     fun consumeZpdUpdate(): List<String>? { val e = lastZpdUpdate; lastZpdUpdate = null; return e }
 
-
-    // ── Operation type ────────────────────────────────────────────────────────
     private var operationType: String = "+"
-
-    // ── Digit mode ────────────────────────────────────────────────────────────
     private var digitMode: Int = 3
 
     fun startSession(op: String, mode: Int) {
@@ -82,6 +76,7 @@ class AdaptiveEngine {
         focusQuestionCount = 0
         consecutiveWrong = 0
         pendingConfirmKC = null
+        terminalHandled = false  // FIX (Issue 3): reset guard on new session
         currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
         assessmentProvedAllMastered = false
@@ -106,13 +101,11 @@ class AdaptiveEngine {
     private val minFocus                 = 5
     private val frustrationLimit         = 12
 
-    // ── ZPD ancestor tracking ─────────────────────────────────────────────────
     private val kcAncestors = mutableMapOf<Int, MutableSet<Int>>()
 
     var correctAnswer: Int = 0
         private set
 
-    // ── Exposed question metadata for CSV logging ─────────────────────────
     var lastNum1: Int = 0; private set
     var lastNum2: Int = 0; private set
     var lastQuestionText: String = ""; private set
@@ -127,7 +120,6 @@ class AdaptiveEngine {
             return filterIds.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
-    /** Returns the short names of concepts currently in the ZPD (unlocked but not mastered). */
     val currentZpdNames: List<String>
         get() {
             val filterIds = activeKCIds()
@@ -135,7 +127,6 @@ class AdaptiveEngine {
             return zpd.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
-    /** Returns the short names of concepts already mastered in this session. */
     val masteredConceptNames: Set<String>
         get() {
             val filterIds = activeKCIds()
@@ -155,7 +146,6 @@ class AdaptiveEngine {
         Log.i(TAG, "  filterIds = $filterIds")
         Log.i(TAG, "  mastered  = ${filterIds.filter { student.isMastered(it) }.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
         Log.i(TAG, "  ZPD       = ${initZpd.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
-
 
         val reachable = mutableSetOf<Int>()
         val seed = ArrayDeque(initZpd)
@@ -186,9 +176,15 @@ class AdaptiveEngine {
         return prereqs.any { isAncestor(ancestor, it) }
     }
 
+    // FIX (Issues 2 & 4): addArmIfNeeded now passes pg/ps from the
+    // KnowledgeComponent (fixed values) to both KLUCBBandit and CUSUMDetector.
+    // Previously, KLUCBBandit.addArm() sampled from Beta(20,160) and then
+    // CUSUMDetector read those random values — making mastery timing
+    // non-deterministic.  Now both objects use the same fixed KC parameters.
     private fun addArmIfNeeded(kcId: Int) {
         if (!bandit.hasArm(kcId)) {
             bandit.addArm(kcId, ts)
+            // Read the fixed pg/ps back from the node (which now stores KC values)
             val node = bandit.getNode(kcId)!!
             cusumDetectors[kcId] = CUSUMDetector(
                 pg        = node.pg,
@@ -198,7 +194,6 @@ class AdaptiveEngine {
         }
     }
 
-    // ── Pick next assessment state ─────────────────────────
     private fun getNextAssessmentState(responseString: String): BoundaryState {
         val isAddition = operationType == "+"
         return if (isAddition) {
@@ -208,29 +203,19 @@ class AdaptiveEngine {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Assessment — 1 question per node, but a correct answer triggers a
-    // confirmation question on the same node.  Only two correct answers in a
-    // row appends "1"; any wrong answer appends "0" immediately.
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // Returns true = PASS (both questions correct), false = FAIL
     private fun updateAssessmentNode(kcId: Int, correct: Boolean): Boolean? {
         return if (pendingConfirmKC == kcId) {
-            // This is the confirmation question
             pendingConfirmKC = null
             Log.d(TAG, "[ASSESS KC $kcId] confirmation response: ${if (correct) "PASS" else "FAIL"}")
-            correct  // true → "1", false → "0"
+            correct
         } else {
-            // This is the first question
             if (correct) {
-                // Don't commit yet — ask a second question to rule out a guess
                 pendingConfirmKC = kcId
                 Log.d(TAG, "[ASSESS KC $kcId] first answer correct — asking confirmation question")
-                null  // null = no path update yet, ask again
+                null
             } else {
                 Log.d(TAG, "[ASSESS KC $kcId] first answer wrong — FAIL")
-                false  // commit "0" immediately
+                false
             }
         }
     }
@@ -253,10 +238,8 @@ class AdaptiveEngine {
         Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryDetector.ID_TO_NODE[it] ?: it})" }}")
         Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
 
-
         for (kcId in zpd) addArmIfNeeded(kcId)
 
-        // If ZPD is empty, all eligible KCs are mastered → signal completion
         if (zpd.isEmpty()) {
             if (filterIds.all { student.isMastered(it) }) {
                 Log.i(TAG, "🎓 All KCs mastered! filterIds=$filterIds")
@@ -287,7 +270,6 @@ class AdaptiveEngine {
     }
 
     private fun generateAssessmentQuestion(): Pair<String, List<Int>> {
-        // If we are waiting for a confirmation, re-ask the same concept
         val confirmKC = pendingConfirmKC
         if (confirmKC != null) {
             currentKC = confirmKC
@@ -315,7 +297,6 @@ class AdaptiveEngine {
                 currentKC = kcId
                 Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${BoundaryDetector.ID_TO_NODE[kcId]}) | path='$assessmentResponseString'")
 
-
                 detectionQuestionNo++
                 val (num1, num2) = generateNumbersForKC(currentKC)
                 lastNum1 = num1; lastNum2 = num2
@@ -332,7 +313,15 @@ class AdaptiveEngine {
                 Pair(question, options)
             }
             is BoundaryState.Terminal -> {
-                handleTerminalAssessment(state)
+                // FIX (Issue 3): Only call handleTerminalAssessment once.
+                // Without this guard, if submitAnswer() already called it and
+                // set currentPhase = LEARNING, generateQuestion() would still
+                // route here (phase flips between calls), invoking it a second
+                // time and resetting CUSUM detectors that were just created fresh.
+                if (!terminalHandled) {
+                    terminalHandled = true
+                    handleTerminalAssessment(state)
+                }
                 currentPhase = Phase.LEARNING
                 generateLearningQuestion()
             }
@@ -350,18 +339,18 @@ class AdaptiveEngine {
             val decision = updateAssessmentNode(currentKC, isCorrect)
 
             if (decision != null) {
-                // decision == true  → both questions answered correctly → "1"
-                // decision == false → a wrong answer was given           → "0"
                 assessmentResponseString += if (decision) "1" else "0"
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
                 val nextState = getNextAssessmentState(assessmentResponseString)
-                if (nextState is BoundaryState.Terminal) {
+                // FIX (Issue 3): Guard against double-call — only handle if not
+                // already handled by a prior generateAssessmentQuestion() call.
+                if (nextState is BoundaryState.Terminal && !terminalHandled) {
+                    terminalHandled = true
                     handleTerminalAssessment(nextState)
                     currentPhase = Phase.LEARNING
                 }
             }
-            // decision == null → waiting for confirmation; path unchanged
 
             return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
         }
@@ -389,7 +378,6 @@ class AdaptiveEngine {
                     "focus_q=$focusQuestionCount  consecutive_wrong=$consecutiveWrong"
         )
 
-
         return if (isCorrect) "Correct! 🎉" else "Wrong! The answer was $correctAnswer"
     }
 
@@ -401,14 +389,10 @@ class AdaptiveEngine {
         newlyFoundBoundary = terminal.boundary.mapNotNull { BoundaryDetector.ID_TO_NODE[it] }.toSet()
 
         val solvableIds = terminal.solvable
+        val filterIds   = activeKCIds()
 
-        // Pre-master solvable-minus-boundary (clearly already known).
-        // Also pre-master boundary KCs whose ALL prereqs are in solvable —
-        // those are transitively proven by the assessment (e.g. passed 2A1 → 1A is proven).
-        val filterIds = activeKCIds()
         val toPremaster = terminal.solvable.filter { kcId ->
-            if (kcId !in terminal.boundary) return@filter true   // solvable - boundary: always premaster
-            // boundary KC: premaster only if all its prereqs are in solvable
+            if (kcId !in terminal.boundary) return@filter true
             val prereqs = KnowledgeRepository.getPrerequisites(kcId).filter { it in filterIds }
             prereqs.all { it in solvableIds }
         }
@@ -418,8 +402,20 @@ class AdaptiveEngine {
             cusumDetectors.remove(kcId)
         }
 
+        // FIX (Issue 3): Explicitly remove any bandit arms and CUSUM detectors
+        // for the boundary KCs that are about to enter the learning ZPD, so
+        // that initZPD() → addArmIfNeeded() creates them completely fresh with
+        // clean state.  Without this, a stale arm created during initZPD() at
+        // session start (before any questions were asked) would persist, and its
+        // timeAdded counter would be wrong relative to the post-assessment ts.
+        val boundaryNotPremastered = terminal.boundary.filter { it !in toPremaster }
+        for (kcId in boundaryNotPremastered) {
+            bandit.removeArm(kcId)
+            cusumDetectors.remove(kcId)
+        }
+
         currentPhase = Phase.LEARNING
-        initZPD()
+        initZPD()  // creates fresh arms + detectors for the new ZPD
 
         if (filterIds.all { student.isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
@@ -432,7 +428,6 @@ class AdaptiveEngine {
     // onMastery
     // ─────────────────────────────────────────────────────────────────────────
     private fun onMastery(kcId: Int) {
-        // Save correctness record before removing detector
         val record = cusumDetectors[kcId]?.correctnessRecord?.toList() ?: emptyList()
         val conceptName = BoundaryDetector.ID_TO_NODE[kcId] ?: "$kcId"
         lastMasteryEvent = MasteryEvent(kcId, conceptName, record)

@@ -8,22 +8,18 @@ import kotlin.random.Random
 //─────────────────────────────────────────────────────────────────────────────
 // KLUCBNode
 //
-// Translated from Python class `KLUCB_Node2`:
-//   timesPlayed, correctnessSum, estimate, ucb, lcb, timeAdded
-//   update_estimate(correctness)
-//   compute_lcb_ucb(t)
-//
-// pg and ps are now sampled from Beta(a1=20, b1=160) / Beta(a2=20, b2=160)
-// exactly as in the Python notebook:
-//   self.pg = np.random.beta(a1, b1)
-//   self.ps = np.random.beta(a2, b2)
-// Mean of Beta(20,160) ≈ 0.111, matching the notebook's intent.
-// ─────────────────────────────────────────────────────────────────────────────
+// FIX (Issues 2 & 4): pg and ps are now taken directly from KnowledgeComponent
+// (guessProbability / slipProbability) instead of being sampled from
+// Beta(20,160).  The Beta sampling caused mastery timing to be non-deterministic
+// — lucky samples (e.g. pg ≈ 0.04) could fire mastery after only 3 correct
+// answers, while unlucky samples required 8+.  Using the fixed values defined
+// in KnowledgeRepository makes every session behave identically.
+//─────────────────────────────────────────────────────────────────────────────
 
 class KLUCBNode(
     val timeAdded: Int,
-    val pg: Double,   // sampled from Beta(20,160) — guess probability
-    val ps: Double    // sampled from Beta(20,160) — slip  probability
+    val pg: Double,   // fixed from KnowledgeComponent.guessProbability
+    val ps: Double    // fixed from KnowledgeComponent.slipProbability
 ) {
     var timesPlayed:    Int    = 0
     var correctnessSum: Int    = 0
@@ -31,20 +27,12 @@ class KLUCBNode(
     var ucb:            Double = 0.0
     var lcb:            Double = 0.0
 
-    /** Translated from Python update_estimate(correctness) */
     fun updateEstimate(correctness: Boolean) {
         timesPlayed    += 1
         correctnessSum += if (correctness) 1 else 0
         estimate        = correctnessSum.toDouble() / timesPlayed
     }
 
-    /**
-     * Translated from Python compute_lcb_ucb(ts):
-     *   t = ts - timeAdded
-     *   val = log(1 + t * log(t)^2) / timesPlayed
-     *   ucb = getUCB(val, estimate)
-     *   lcb = getLCB(val, estimate)
-     */
     fun computeUCB(ts: Int) {
         val t    = (ts - timeAdded).coerceAtLeast(2)
         val tD   = t.toDouble()
@@ -60,25 +48,15 @@ class KLUCBNode(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Beta distribution sampler (Johnk's method — no external dependency)
-// Matches np.random.beta(a, b) for the shape parameters used (a=20, b=160).
+// Beta / Gamma samplers — kept for reference but no longer used for pg/ps.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Sample from Beta(alpha, beta) using the Gamma-ratio method.
- * For integer-ish shape parameters this is accurate and fast.
- */
 fun sampleBeta(alpha: Double, beta: Double): Double {
     val x = sampleGamma(alpha)
     val y = sampleGamma(beta)
     return x / (x + y)
 }
 
-/**
- * Sample from Gamma(shape, scale=1) using Marsaglia–Tsang's method.
- * Accurate for shape >= 1; for shape < 1, uses the transformation
- * Gamma(shape) = Gamma(shape+1) * U^(1/shape).
- */
 private fun sampleGamma(shape: Double): Double {
     if (shape < 1.0) {
         val u = Random.nextDouble()
@@ -101,20 +79,15 @@ private fun sampleGamma(shape: Double): Double {
 }
 
 private fun Random.nextGaussian(): Double {
-    // Box-Muller
     val u1 = nextDouble()
     val u2 = nextDouble()
     return kotlin.math.sqrt(-2.0 * ln(u1)) * kotlin.math.cos(2.0 * Math.PI * u2)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KL divergence helpers — translated from Python kl_div / kl / klPrime / klDPrime
+// KL divergence helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Bernoulli KL divergence KL(x || y)
- * Translated from Python kl_div(x, y)
- */
 fun klDiv(x: Double, y: Double): Double {
     if (x == y)   return 0.0
     if (x == 1.0) return x * ln(x / y)
@@ -124,7 +97,6 @@ fun klDiv(x: Double, y: Double): Double {
     return ln(1.0 / (1.0 - y))
 }
 
-/** f(q) = KL(p||q) - val — translated from Python kl(p, val) */
 private fun klFunc(p: Double, value: Double): (Double) -> Double {
     return when {
         p == 1.0 -> { q: Double -> ln(1.0 / q) - value }
@@ -137,45 +109,15 @@ private fun klFunc(p: Double, value: Double): (Double) -> Double {
     }
 }
 
-/** f'(q) — translated from Python klPrime(p) */
 private fun klPrime(p: Double): (Double) -> Double =
     if (p == 0.0) { q -> 1.0 / (1.0 - q) }
     else          { q -> (-p / q) + ((1.0 - p) / (1.0 - q)) }
 
-/** f''(q) — translated from Python klDPrime(p) */
 private fun klDPrime(p: Double): (Double) -> Double =
     { q -> (p / q.pow(2)) + ((1.0 - p) / (1.0 - q).pow(2)) }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Newton–Raphson / Halley solver — now matches Python's retry loop exactly:
-//
-//   Python getUCB:
-//     while True:
-//       try:
-//         res = optimize.newton(kl(est,value),
-//                               fprime=klPrime(est), fprime2=klDPrime(est),
-//                               x0=0.99 + abs(normal(0.0001, 0.01)))
-//         break
-//       except ValueError: pass
-//
-//   Python getLCB:
-//     while True:
-//       try:
-//         res = optimize.newton(..., x0=0.01 - abs(normal(0.0001, 0.01)))
-//         break
-//       except ValueError: pass
-//
-// We reproduce the same random x0 perturbation and the same infinite-retry
-// until a valid root is found. A binary-search fallback is kept only as a
-// last resort after MAX_ATTEMPTS retries to avoid infinite loops on edge cases.
-// ─────────────────────────────────────────────────────────────────────────────
-
 private const val MAX_ATTEMPTS = 200
 
-/**
- * One Halley step — equivalent to scipy.optimize.newton with fprime + fprime2.
- * Returns null if the step diverges or a division-by-zero occurs.
- */
 private fun halleyRoot(
     f:   (Double) -> Double,
     fP:  (Double) -> Double,
@@ -199,7 +141,6 @@ private fun halleyRoot(
     return if (abs(f(x)) < tol * 1000) x else null
 }
 
-/** Binary-search fallback for robustness */
 private fun klBinarySearch(p: Double, budget: Double, searchHigh: Boolean): Double {
     val eps = 1e-10
     var lo = if (searchHigh) p else eps
@@ -212,18 +153,10 @@ private fun klBinarySearch(p: Double, budget: Double, searchHigh: Boolean): Doub
     return if (searchHigh) lo else hi
 }
 
-/**
- * KL-UCB upper bound — mirrors Python getUCB exactly:
- *   while True:
- *     x0 = 0.99 + abs(normal(0.0001, 0.01))   ← random perturbation near 1
- *     try: res = newton(..., x0); break
- *     except ValueError: pass
- */
 fun getUCB(value: Double, est: Double): Double {
     if (klDiv(est, 0.999) < value) return 1.0
     val f = klFunc(est, value); val fP = klPrime(est); val fPP = klDPrime(est)
     repeat(MAX_ATTEMPTS) {
-        // x0 = 0.99 + abs(Normal(0.0001, 0.01))  — same distribution as Python
         val x0 = 0.99 + abs(Random.nextGaussian() * 0.01 + 0.0001)
         val res = halleyRoot(f, fP, fPP, x0) ?: return@repeat
         if (res > est && res < 1.0) return res
@@ -231,18 +164,10 @@ fun getUCB(value: Double, est: Double): Double {
     return klBinarySearch(est, value, searchHigh = true)
 }
 
-/**
- * KL-UCB lower bound — mirrors Python getLCB exactly:
- *   while True:
- *     x0 = 0.01 - abs(normal(0.0001, 0.01))   ← random perturbation near 0
- *     try: res = newton(..., x0); break
- *     except ValueError: pass
- */
 fun getLCB(value: Double, est: Double): Double {
     if (klDiv(est, 0.001) < value) return 0.0
     val f = klFunc(est, value); val fP = klPrime(est); val fPP = klDPrime(est)
     repeat(MAX_ATTEMPTS) {
-        // x0 = 0.01 - abs(Normal(0.0001, 0.01))  — same distribution as Python
         val x0 = 0.01 - abs(Random.nextGaussian() * 0.01 + 0.0001)
         val res = halleyRoot(f, fP, fPP, x0) ?: return@repeat
         if (res < est && res > 0.0) return res
@@ -258,45 +183,52 @@ class KLUCBBandit {
 
     private val nodes = mutableMapOf<Int, KLUCBNode>()
 
-    /**
-     * Add a new KC arm — pg and ps are now sampled from Beta(20,160),
-     * matching the Python notebook's KLUCB_Node2(t, a1=20, b1=160, a2=20, b2=160).
-     */
+    // FIX (Issues 2 & 4): Use fixed pg/ps from KnowledgeRepository instead of
+    // sampling from Beta(20,160).  This makes CUSUM mastery thresholds
+    // deterministic and predictable across every session.
     fun addArm(kcId: Int, timeAdded: Int) {
         if (kcId !in nodes) {
+            val pg = KnowledgeRepository.getGuessProb(kcId)
+            val ps = KnowledgeRepository.getSlipProb(kcId)
             nodes[kcId] = KLUCBNode(
                 timeAdded = timeAdded,
-                pg        = sampleBeta(20.0, 160.0),
-                ps        = sampleBeta(20.0, 160.0)
+                pg        = pg,
+                ps        = ps
             )
         }
     }
 
     fun removeArm(kcId: Int) { nodes.remove(kcId) }
 
-    /** Clear all arms — called when switching between addition and subtraction */
     fun clearAll() { nodes.clear() }
 
     fun hasArm(kcId: Int): Boolean = kcId in nodes
     fun activeArms(): Set<Int>     = nodes.keys.toSet()
     fun getNode(kcId: Int): KLUCBNode? = nodes[kcId]
 
-    /**
-     * Select the KC to present next.
-     * Logic unchanged — translated from klucbCUSUM():
-     *   1. Play any unplayed arm first
-     *   2. Compute UCB for each node using ts (total practice questions)
-     *   3. Return arm with highest UCB
-     */
+    // FIX (Issue 1): Added starvation prevention.
+    // Previously, after one wrong answer on KC A (estimate → 0.0), the UCB of
+    // KC B would always dominate and KC A would never be selected again.
+    // Now: if the least-played arm has been played 3+ fewer times than the
+    // most-played arm, we force-select it regardless of UCB values.
+    // This guarantees every concept gets a fair share of questions.
     fun selectConcept(zpd: List<Int>, ts: Int): Int {
         val active = zpd.filter { it in nodes }
         if (active.isEmpty()) {
             return if (zpd.isNotEmpty()) zpd.first() else 1
         }
 
+        // Always play an arm that has never been played yet
         active.firstOrNull { nodes[it]!!.timesPlayed == 0 }
             ?.let { return it }
 
+        // FIX (Issue 1): Starvation prevention — if any arm is lagging 3+
+        // plays behind the most-played arm, force it next.
+        val maxPlays = active.maxOf { nodes[it]!!.timesPlayed }
+        val starved  = active.firstOrNull { nodes[it]!!.timesPlayed <= maxPlays - 3 }
+        if (starved != null) return starved
+
+        // Normal UCB selection
         active.forEach { kcId -> nodes[kcId]?.computeUCB(ts) }
         return active.maxByOrNull { nodes[it]?.ucb ?: Double.MIN_VALUE } ?: active.first()
     }
