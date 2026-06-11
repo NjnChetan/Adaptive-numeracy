@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
+import com.example.p1.R
+import kotlin.Pair
 
 class MainActivity : AppCompatActivity() {
 
@@ -86,7 +88,6 @@ class MainActivity : AppCompatActivity() {
             val isLandscape = resources.configuration.orientation ==
                     android.content.res.Configuration.ORIENTATION_LANDSCAPE
             if (isLandscape) {
-                // 1x4 horizontal row
                 opGrid?.removeAllViews()
                 opGrid?.orientation = android.widget.LinearLayout.HORIZONTAL
                 listOf(btnAdd, btnSub, btnMul, btnDiv).forEach { btn ->
@@ -97,7 +98,6 @@ class MainActivity : AppCompatActivity() {
                     opGrid?.addView(btn)
                 }
             } else {
-                // 2x2 grid
                 opGrid?.removeAllViews()
                 opGrid?.orientation = android.widget.LinearLayout.VERTICAL
                 val row1 = android.widget.LinearLayout(this).apply {
@@ -185,30 +185,34 @@ class MainActivity : AppCompatActivity() {
             val m = charArrayOf('०','१','२','३','४','५','६','७','८','९')
             return s.map { if (it.isDigit()) m[it - '0'] else it }.joinToString("")
         }
+
         fun loc(s: String): String {
             if (!isMarathi) return s
             if (s.startsWith("Q: ")) return "प्रश्न: " + toMarathi(s.substring(3))
             val translated = when(s) {
-                "Select Level" -> "पातळी निवडा"
-                "Select Operation" -> "क्रिया निवडा"
-                "Start" -> "सुरू करा"
-                "⟳ Rotate" -> "⟳ फिरवा"
-                "Finish" -> "संपवा"
-                "Excellent performance!" -> "उत्कृष्ट कामगिरी!"
-                "Score" -> "गुण"
-                "Correct" -> "बरोबर"
-                "Incorrect" -> "चूक"
-                "How you did by topic" -> "विषयानुसार तुमची कामगिरी"
-                "⌂ Home" -> "⌂ मुख्य पान"
-                " Mastered!" -> " प्राविण्य मिळवले!"
-                "\n\nPractice Starts" -> "\n\nसराव सुरू"
-                "✓ Good" -> "✓ छान"
-                "OK" -> "ठीक आहे"
-                "🔍 Boundary Test" -> "🔍 सीमा चाचणी"
-                "Concept Mastered!" -> "संकल्पनेवर प्राविण्य मिळवले!"
-                "Great Job!" -> "खूप छान!"
-                "You're making excellent progress." -> "तुम्ही उत्तम प्रगती करत आहात."
-                "Moving to the next concept." -> "पुढच्या संकल्पनेकडे जात आहे."
+                "Select Level"               -> "पातळी निवडा"
+                "Select Operation"           -> "क्रिया निवडा"
+                "Start"                      -> "सुरू करा"
+                "⟳ Rotate"                  -> "⟳ फिरवा"
+                "Finish"                     -> "संपवा"
+                "Excellent performance!"     -> "उत्कृष्ट कामगिरी!"
+                "Score"                      -> "गुण"
+                "Correct"                    -> "बरोबर"
+                "Incorrect"                  -> "चूक"
+                "How you did by topic"       -> "विषयानुसार तुमची कामगिरी"
+                "⌂ Home"                    -> "⌂ मुख्य पान"
+                " Mastered!"                 -> " प्राविण्य मिळवले!"
+                "\n\nPractice Starts"        -> "\n\nसराव सुरू"
+                "✓ Good"                    -> "✓ छान"
+                "OK"                         -> "ठीक आहे"
+                "🔍 Boundary Test"           -> "🔍 सीमा चाचणी"
+                // Kid-friendly mastery overlay strings
+                "Well Done! ⭐"              -> "शाब्बास! ⭐"
+                "You learned this!"          -> "तुम्ही हे शिकलात!"
+                "Now let's try something new." -> "आता नवीन काही करूया."
+                // All concepts mastered strings
+                "🎉 All concepts mastered!"  -> "🎉 सर्व संकल्पना शिकल्या!"
+                "Super! You have learned it all!" -> "खूप छान! तुम्ही सर्व शिकलात!"
                 "\n\nLet's test what you know!" -> "\n\nचला, तुमचे ज्ञान तपासूया!"
                 else -> s
             }
@@ -281,7 +285,7 @@ class MainActivity : AppCompatActivity() {
             circularProgressBar?.progress = perc
             summaryCorrectCount?.text = loc("$correct")
             summaryIncorrectCount?.text = loc("${total - correct}")
-            
+
             panel.findViewById<TextView>(R.id.summaryExcellentText)?.visibility = View.GONE
 
             performanceContainer?.removeAllViews()
@@ -318,7 +322,6 @@ class MainActivity : AppCompatActivity() {
                     layoutParams = android.widget.LinearLayout.LayoutParams(0, -2, 1f)
                 }
 
-                // Badge
                 val badge = TextView(this@MainActivity).apply {
                     val isGood = cPerc >= 80
                     text = if (isGood) "✓ Good" else "OK"
@@ -339,7 +342,6 @@ class MainActivity : AppCompatActivity() {
 
                 header.addView(nameLabel); header.addView(badge); header.addView(scoreLabel)
 
-                // Progress Bar
                 val progressContainer = android.widget.FrameLayout(this@MainActivity).apply {
                     layoutParams = android.widget.LinearLayout.LayoutParams(-1, (6 * resources.displayMetrics.density).toInt()).apply {
                         setMargins(0, 8, 0, 0)
@@ -372,11 +374,14 @@ class MainActivity : AppCompatActivity() {
             btnRow2?.visibility = View.GONE
             cardBorder?.background = normalBorder
             questionText.setTextColor(Color.parseColor("#2B3A8C"))
-            questionText.text = loc(" Mastered!")
+            questionText.text = loc("🎉 All concepts mastered!")
 
             lifecycleScope.launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(2000)
-                finish()
+                correct = 0; total = 0
+                conceptStats.clear(); masteredLevels.clear()
+                quizLayout.visibility = View.GONE
+                homeLayout.visibility = View.VISIBLE
             }
         }
 
@@ -390,7 +395,10 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(3000)
                 sessionLogger.endSession()
-                finish()
+                correct = 0; total = 0
+                conceptStats.clear(); masteredLevels.clear()
+                quizLayout.visibility = View.GONE
+                homeLayout.visibility = View.VISIBLE
             }
         }
 
@@ -399,10 +407,6 @@ class MainActivity : AppCompatActivity() {
 
             lifecycleScope.launch(Dispatchers.Default) {
 
-                // ── All engine reads MUST happen on Dispatchers.Default ──────
-                // ── to avoid data races with submitAnswer() ──────────────────
-
-                // ── All mastered ────────────────────────────────────────────
                 if (engine.consumeAllMastered()) {
                     withContext(Dispatchers.Main) {
                         if (engine.assessmentProvedAllMastered) showSuperMastered() else showMastered()
@@ -410,11 +414,9 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // ── Boundary found → "Practice Starts" alert ───────────────
                 val boundary = engine.consumeBoundary()
 
                 if (boundary != null) {
-                    // Log K-BOUNDARY (file I/O is fine on Default)
                     sessionLogger.logKBoundary(boundary.toList())
 
                     if (engine.consumeAllMastered()) {
@@ -435,7 +437,6 @@ class MainActivity : AppCompatActivity() {
                         btnRow1?.visibility = View.VISIBLE
                         btnRow2?.visibility = View.VISIBLE
                     }
-                    // Re-enter loadQuestion() via Main to avoid deep recursion on Default
                     withContext(Dispatchers.Main) { loadQuestion() }
                     return@launch
                 }
@@ -455,7 +456,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // ── Generate next question (already on Default) ────────────
                 val (question, answers) = engine.generateQuestion()
 
                 if (engine.consumeAllMastered()) {
@@ -470,8 +470,6 @@ class MainActivity : AppCompatActivity() {
                 val masteredSet = engine.masteredConceptNames
                 val zpdNames = engine.currentZpdNames
 
-                // During assessment: show only the concept being assessed (highlighted)
-                // During learning: show ZPD concepts + already mastered ones
                 val visibleConcepts = if (isAssessmentPhase) {
                     listOf(currentConcept)
                 } else {
@@ -487,7 +485,6 @@ class MainActivity : AppCompatActivity() {
                     conceptsContainer?.removeAllViews()
 
                     if (isAssessmentPhase) {
-                        // ── Modern "Boundary Test" badge during assessment ──
                         val badgeContainer = android.widget.LinearLayout(this@MainActivity).apply {
                             orientation = android.widget.LinearLayout.HORIZONTAL
                             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -506,7 +503,6 @@ class MainActivity : AppCompatActivity() {
                             layoutParams = lp
                         }
 
-                        // "🔍 Boundary Test" label
                         val testLabel = TextView(this@MainActivity).apply {
                             text = loc("🔍 Boundary Test")
                             textSize = 9f
@@ -516,7 +512,6 @@ class MainActivity : AppCompatActivity() {
                         }
                         badgeContainer.addView(testLabel)
 
-                        // Separator dot
                         val dot = TextView(this@MainActivity).apply {
                             text = "•"
                             textSize = 9f
@@ -525,7 +520,6 @@ class MainActivity : AppCompatActivity() {
                         }
                         badgeContainer.addView(dot)
 
-                        // Concept name chip
                         val conceptChip = TextView(this@MainActivity).apply {
                             text = loc(currentConcept)
                             textSize = 9f
@@ -542,7 +536,6 @@ class MainActivity : AppCompatActivity() {
 
                         conceptsContainer?.addView(badgeContainer)
                     } else {
-                        // ── Learning phase: show ZPD + mastered concepts ──
                         for (name in visibleConcepts) {
                             val isCurrent = (name == currentConcept)
                             val isMastered = (name in masteredSet)
@@ -604,7 +597,6 @@ class MainActivity : AppCompatActivity() {
                         btn.setOnClickListener {
                             answerButtons.forEach { it.isEnabled = false }
                             val ok = answers[i] == engine.correctAnswer
-                            // Capture question metadata before submitAnswer
                             val qKCName = engine.currentKCName
                             val qKCId = engine.currentKCId
                             val qText = engine.lastQuestionText
@@ -615,16 +607,13 @@ class MainActivity : AppCompatActivity() {
                             val qNo = if (isAssessment) engine.detectionQuestionNo else engine.practiceQuestionNo
 
                             lifecycleScope.launch(Dispatchers.Default) {
-                                // submitAnswer on Default — it does CUSUM/BKT computation
                                 engine.submitAnswer(answers[i])
 
-                                // Track stats for summary (practice only, skip assessment)
                                 if (!isAssessment) {
                                     val stats = conceptStats.getOrDefault(qKCName, Pair(0, 0))
                                     conceptStats[qKCName] = Pair(stats.first + (if (ok) 1 else 0), stats.second + 1)
                                 }
 
-                                // CSV logging (file I/O fine on Default)
                                 val misconception = if (!ok) {
                                     DistractorGenerator.getMisconception(qKCId, qNum1, qNum2, qCorrectAns, answers[i])
                                 } else ""
@@ -635,7 +624,6 @@ class MainActivity : AppCompatActivity() {
                                     sessionLogger.logPractice(qNo, qKCName, qText, qCorrectAns, answers[i], ok, misconception)
                                 }
 
-                                // Consume events — all on Default (safe, no race)
                                 var newlyMasteredConcept: String? = null
                                 engine.consumeMasteryEvent()?.let { evt ->
                                     sessionLogger.logMastery(qNo, evt.conceptName, evt.correctnessRecord)
@@ -646,7 +634,6 @@ class MainActivity : AppCompatActivity() {
                                     sessionLogger.logZpdUpdate(added)
                                 }
 
-                                // Check if all mastered
                                 if (engine.consumeAllMastered()) {
                                     withContext(Dispatchers.Main) {
                                         if (!isAssessment) {
@@ -670,7 +657,7 @@ class MainActivity : AppCompatActivity() {
                                         questionText.setTextColor(Color.parseColor("#C62828"))
                                     }
                                 }
-                                
+
                                 if (newlyMasteredConcept != null) {
                                     withContext(Dispatchers.Main) {
                                         val overlay = panel.findViewById<android.widget.FrameLayout>(R.id.masteryOverlay)
@@ -678,15 +665,16 @@ class MainActivity : AppCompatActivity() {
                                         val title = panel.findViewById<TextView>(R.id.masteryTitleText)
                                         val msg1 = panel.findViewById<TextView>(R.id.masteryMessageText1)
                                         val msg2 = panel.findViewById<TextView>(R.id.masteryMessageText2)
-                                        
-                                        title?.text = loc("Great Job!")
-                                        msg1?.text = loc("You're making excellent progress.")
-                                        msg2?.text = loc("Moving to the next concept.")
-                                        
+
+                                        // ── Kid-friendly mastery messages ──
+                                        title?.text = loc("Well Done! ⭐")
+                                        msg1?.text = loc("You learned this!")
+                                        msg2?.text = loc("Now let's try something new.")
+
                                         overlay?.alpha = 0f
                                         overlay?.visibility = View.VISIBLE
                                         overlay?.animate()?.alpha(1f)?.setDuration(300)?.start()
-                                        
+
                                         card?.alpha = 0f
                                         card?.translationY = 80f
                                         card?.scaleX = 0.95f
@@ -708,7 +696,6 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 } else {
                                     kotlinx.coroutines.delay(900)
-                                    // Switch to Main before calling loadQuestion() to reset the stack
                                     withContext(Dispatchers.Main) { loadQuestion() }
                                 }
                             }
@@ -722,7 +709,6 @@ class MainActivity : AppCompatActivity() {
             if (selectedOp == null) return@setOnClickListener
             engine.startSession(selectedOp!!, selectedDigitMode ?: 1)
 
-            // Start CSV logging session
             sessionLogger.startSession()
             val lang = if (isMarathi) "Marathi" else "English"
             val opName = when (selectedOp) {
@@ -737,6 +723,8 @@ class MainActivity : AppCompatActivity() {
             masteredLevels.clear()
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
+            btnRow1?.visibility = View.VISIBLE
+            btnRow2?.visibility = View.VISIBLE
             loadQuestion()
         }
 
@@ -811,7 +799,6 @@ class MainActivity : AppCompatActivity() {
                 cumulativeDeg += 90f
                 clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
             }
-            // portrait steps: 0,2 (panel is upright); landscape steps: 1,3
             val panelIsLandscape = (rotationStep == 1 || rotationStep == 3)
             val effectivelyLandscape = if (isPhone) false else panelIsLandscape
             opGrid?.post {
