@@ -771,18 +771,18 @@
                     android:paddingHorizontal="16dp"
                     android:elevation="8dp">
 
-                    <FrameLayout
-                        android:layout_width="100dp"
-                        android:layout_height="100dp"
-                        android:background="@drawable/circle_bg"
-                        android:layout_marginBottom="16dp">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:text="🎉"
-                            android:textSize="48sp"/>
-                    </FrameLayout>
+<!--                    <FrameLayout-->
+<!--                        android:layout_width="100dp"-->
+<!--                        android:layout_height="100dp"-->
+<!--                        android:background="@drawable/circle_bg"-->
+<!--                        android:layout_marginBottom="16dp">-->
+<!--&lt;!&ndash;                        <TextView&ndash;&gt;-->
+<!--&lt;!&ndash;                            android:layout_width="wrap_content"&ndash;&gt;-->
+<!--&lt;!&ndash;                            android:layout_height="wrap_content"&ndash;&gt;-->
+<!--&lt;!&ndash;                            android:layout_gravity="center"&ndash;&gt;-->
+<!--&lt;!&ndash;                            android:text=""&ndash;&gt;-->
+<!--&lt;!&ndash;                            android:textSize="48sp"/>&ndash;&gt;-->
+<!--                    </FrameLayout>-->
 
                     <TextView
                         android:id="@+id/masteryTitleText"

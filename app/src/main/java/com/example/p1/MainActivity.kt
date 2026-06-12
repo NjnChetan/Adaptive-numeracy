@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                 "OK"                         -> "ठीक आहे"
                 "🔍 Boundary Test"           -> "🔍 सीमा चाचणी"
                 // Kid-friendly mastery overlay strings
-                "Well Done! ⭐"              -> "शाब्बास! ⭐"
+                "Well Done! "              -> "शाब्बास! "
                 "You learned this!"          -> "तुम्ही हे शिकलात!"
                 "Now let's try something new." -> "आता नवीन काही करूया."
                 // All concepts mastered strings
@@ -667,7 +667,7 @@ class MainActivity : AppCompatActivity() {
                                         val msg2 = panel.findViewById<TextView>(R.id.masteryMessageText2)
 
                                         // ── Kid-friendly mastery messages ──
-                                        title?.text = loc("Well Done! ⭐")
+                                        title?.text = loc("Well Done!")
                                         msg1?.text = loc("You learned this!")
                                         msg2?.text = loc("Now let's try something new.")
 
