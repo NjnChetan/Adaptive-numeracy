@@ -230,7 +230,7 @@ object KnowledgeRepository {
      * KCs whose prerequisites are ALL mastered but which are not yet mastered.
      * Optionally filtered to a specific set of KC IDs (e.g. addition-only or subtraction-only).
      */
-    fun getZPD(student: StudentModel, filterIds: List<Int>? = null): List<Int> {
+    fun getZPD(isMastered: (Int) -> Boolean, filterIds: List<Int>? = null): List<Int> {
         val pool = if (filterIds != null)
             components.values.filter { it.id in filterIds }
         else
@@ -238,8 +238,8 @@ object KnowledgeRepository {
 
         return pool
             .filter { kc ->
-                !student.isMastered(kc.id) &&
-                        kc.prerequisites.all { student.isMastered(it) }
+                !isMastered(kc.id) &&
+                        kc.prerequisites.all { isMastered(it) }
             }
             .map { it.id }
             .sorted()

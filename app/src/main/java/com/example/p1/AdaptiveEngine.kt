@@ -7,7 +7,10 @@ class AdaptiveEngine {
 
     private val TAG = "AdaptiveSystem"
 
-    val student = StudentModel()
+    private val masteredKCs = mutableSetOf<Int>()
+    private fun isMastered(kcId: Int): Boolean = kcId in masteredKCs
+    private fun setMastered(kcId: Int) { masteredKCs.add(kcId) }
+    private fun resetStudent() { masteredKCs.clear() }
 
     private val fpr   = 0.00009
     private val beta  = CUSUMDetector.thresholdFromFPR(fpr)  // ≈ 9.32
@@ -80,7 +83,7 @@ class AdaptiveEngine {
         currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
         assessmentProvedAllMastered = false
-        student.reset()
+        resetStudent()
         initZPD()
     }
 
@@ -123,14 +126,14 @@ class AdaptiveEngine {
     val currentZpdNames: List<String>
         get() {
             val filterIds = activeKCIds()
-            val zpd = KnowledgeRepository.getZPD(student, filterIds)
+            val zpd = KnowledgeRepository.getZPD(::isMastered, filterIds)
             return zpd.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
     val masteredConceptNames: Set<String>
         get() {
             val filterIds = activeKCIds()
-            return filterIds.filter { student.isMastered(it) }
+            return filterIds.filter { isMastered(it) }
                 .map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
                 .toSet()
         }
@@ -140,11 +143,11 @@ class AdaptiveEngine {
     private fun initZPD() {
         kcAncestors.clear()
         val filterIds = activeKCIds()
-        val initZpd = KnowledgeRepository.getZPD(student, filterIds)
+        val initZpd = KnowledgeRepository.getZPD(::isMastered, filterIds)
 
         Log.i(TAG, "── initZPD() ──")
         Log.i(TAG, "  filterIds = $filterIds")
-        Log.i(TAG, "  mastered  = ${filterIds.filter { student.isMastered(it) }.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
+        Log.i(TAG, "  mastered  = ${filterIds.filter { isMastered(it) }.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
         Log.i(TAG, "  ZPD       = ${initZpd.map { "$it(${KnowledgeRepository.components[it]?.name})" }}")
 
         val reachable = mutableSetOf<Int>()
@@ -232,15 +235,15 @@ class AdaptiveEngine {
 
     private fun generateLearningQuestion(): Pair<String, List<Int>> {
         val filterIds = activeKCIds()
-        val zpd = KnowledgeRepository.getZPD(student, filterIds)
+        val zpd = KnowledgeRepository.getZPD(::isMastered, filterIds)
 
         Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryDetector.ID_TO_NODE[it] ?: it})" }}")
-        Log.d(TAG, "  mastered = ${filterIds.filter { student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
+        Log.d(TAG, "  mastered = ${filterIds.filter { isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
 
         for (kcId in zpd) addArmIfNeeded(kcId)
 
         if (zpd.isEmpty()) {
-            if (filterIds.all { student.isMastered(it) }) {
+            if (filterIds.all { isMastered(it) }) {
                 Log.i(TAG, "🎓 All KCs mastered! filterIds=$filterIds")
                 newlyAllMastered = true
             }
@@ -357,7 +360,6 @@ class AdaptiveEngine {
         // ── LEARNING phase ────────────────────────────────────────────────────
 
         bandit.update(currentKC, isCorrect)
-        student.bktUpdateBelief(currentKC, isCorrect)
 
         val mastered = cusumDetectors[currentKC]?.update(isCorrect) ?: false
 
@@ -396,7 +398,7 @@ class AdaptiveEngine {
             prereqs.all { it in solvableIds }
         }
         for (kcId in toPremaster) {
-            student.setMastered(kcId)
+            setMastered(kcId)
             bandit.removeArm(kcId)
             cusumDetectors.remove(kcId)
         }
@@ -416,7 +418,7 @@ class AdaptiveEngine {
         currentPhase = Phase.LEARNING
         initZPD()  // creates fresh arms + detectors for the new ZPD
 
-        if (filterIds.all { student.isMastered(it) }) {
+        if (filterIds.all { isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
             newlyAllMastered = true
             assessmentProvedAllMastered = true
@@ -431,7 +433,7 @@ class AdaptiveEngine {
         val conceptName = BoundaryDetector.ID_TO_NODE[kcId] ?: "$kcId"
         lastMasteryEvent = MasteryEvent(kcId, conceptName, record)
 
-        student.setMastered(kcId)
+        setMastered(kcId)
         bandit.removeArm(kcId)
         cusumDetectors.remove(kcId)
         focusKC            = null
@@ -450,13 +452,13 @@ class AdaptiveEngine {
         for (childKc in children) {
             val prereqs = KnowledgeRepository.getPrerequisites(childKc)
                 .filter { it in filterIds }
-            val allPrereqsMet = prereqs.all { student.isMastered(it) }
+            val allPrereqsMet = prereqs.all { isMastered(it) }
             if (!allPrereqsMet) {
                 Log.d(TAG, "  KC $childKc (${BoundaryDetector.ID_TO_NODE[childKc]}) still locked: " +
-                        "unmastered prereqs = ${prereqs.filter { !student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
+                        "unmastered prereqs = ${prereqs.filter { !isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
                 continue
             }
-            if (!student.isMastered(childKc)) {
+            if (!isMastered(childKc)) {
                 addArmIfNeeded(childKc)
                 unlockedKCs.add(childKc)
             }
@@ -466,14 +468,14 @@ class AdaptiveEngine {
             lastZpdUpdate = unlockedKCs.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
-        val newZpd = KnowledgeRepository.getZPD(student, filterIds)
+        val newZpd = KnowledgeRepository.getZPD(::isMastered, filterIds)
         for (newKc in newZpd) addArmIfNeeded(newKc)
 
         Log.i(TAG, "  After mastery of ${BoundaryDetector.ID_TO_NODE[kcId] ?: kcId}:")
         Log.i(TAG, "  New ZPD = ${newZpd.map { "${BoundaryDetector.ID_TO_NODE[it] ?: it}" }}")
-        Log.i(TAG, "  Mastered so far: ${filterIds.filter { student.isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
+        Log.i(TAG, "  Mastered so far: ${filterIds.filter { isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
 
-        if (filterIds.all { student.isMastered(it) }) {
+        if (filterIds.all { isMastered(it) }) {
             Log.i(TAG, "🎓 ALL KCs MASTERED for digitMode=$digitMode!")
             newlyAllMastered = true
         }

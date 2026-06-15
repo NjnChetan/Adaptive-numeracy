@@ -14,7 +14,6 @@ class KLUCBNode(val timeAdded: Int) {
     var correctnessSum: Int    = 0
     var estimate:       Double = 0.0
     var ucb:            Double = 0.0
-    var lcb:            Double = 0.0
 
     fun updateEstimate(correctness: Boolean) {
         timesPlayed    += 1
@@ -27,12 +26,11 @@ class KLUCBNode(val timeAdded: Int) {
         val tD   = t.toDouble()
         val val_ = ln(1.0 + tD * ln(tD).pow(2)) / timesPlayed
         ucb = getUCB(val_, estimate)
-        lcb = getLCB(val_, estimate)
     }
 
     override fun toString(): String =
         "timesPlayed=$timesPlayed, estimate=${"%.3f".format(estimate)}, " +
-                "ucb=${"%.3f".format(ucb)}, lcb=${"%.3f".format(lcb)}, " +
+                "ucb=${"%.3f".format(ucb)}, " +
                 "timeAdded=$timeAdded"
 }
 
@@ -116,17 +114,6 @@ fun getUCB(value: Double, est: Double): Double {
     return klBinarySearch(est, value, searchHigh = true)
 }
 
-fun getLCB(value: Double, est: Double): Double {
-    if (klDiv(est, 0.001) < value) return 0.0
-    val f = klFunc(est, value); val fP = klPrime(est); val fPP = klDPrime(est)
-    repeat(MAX_ATTEMPTS) {
-        val x0 = 0.01 - abs(Random.nextGaussian() * 0.01 + 0.0001)
-        val res = halleyRoot(f, fP, fPP, x0) ?: return@repeat
-        if (res < est && res > 0.0) return res
-    }
-    return klBinarySearch(est, value, searchHigh = false)
-}
-
 private fun Random.nextGaussian(): Double {
     val u1 = nextDouble()
     val u2 = nextDouble()
@@ -176,8 +163,7 @@ class KLUCBBandit {
                     "KLUCBBandit",
                     "KC $kcId | timesPlayed=${node.timesPlayed} " +
                             "est=${"%.3f".format(node.estimate)} " +
-                            "ucb=${"%.3f".format(node.ucb)} " +
-                            "lcb=${"%.3f".format(node.lcb)}"
+                            "ucb=${"%.3f".format(node.ucb)}"
                 )
             }
         }
