@@ -5,22 +5,11 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.random.Random
 
-//─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // KLUCBNode
-//
-// FIX (Issues 2 & 4): pg and ps are now taken directly from KnowledgeComponent
-// (guessProbability / slipProbability) instead of being sampled from
-// Beta(20,160).  The Beta sampling caused mastery timing to be non-deterministic
-// — lucky samples (e.g. pg ≈ 0.04) could fire mastery after only 3 correct
-// answers, while unlucky samples required 8+.  Using the fixed values defined
-// in KnowledgeRepository makes every session behave identically.
-//─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
-class KLUCBNode(
-    val timeAdded: Int,
-    val pg: Double,   // fixed from KnowledgeComponent.guessProbability
-    val ps: Double    // fixed from KnowledgeComponent.slipProbability
-) {
+class KLUCBNode(val timeAdded: Int) {
     var timesPlayed:    Int    = 0
     var correctnessSum: Int    = 0
     var estimate:       Double = 0.0
@@ -44,44 +33,7 @@ class KLUCBNode(
     override fun toString(): String =
         "timesPlayed=$timesPlayed, estimate=${"%.3f".format(estimate)}, " +
                 "ucb=${"%.3f".format(ucb)}, lcb=${"%.3f".format(lcb)}, " +
-                "timeAdded=$timeAdded, pg=${"%.3f".format(pg)}, ps=${"%.3f".format(ps)}"
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Beta / Gamma samplers — kept for reference but no longer used for pg/ps.
-// ─────────────────────────────────────────────────────────────────────────────
-
-fun sampleBeta(alpha: Double, beta: Double): Double {
-    val x = sampleGamma(alpha)
-    val y = sampleGamma(beta)
-    return x / (x + y)
-}
-
-private fun sampleGamma(shape: Double): Double {
-    if (shape < 1.0) {
-        val u = Random.nextDouble()
-        return sampleGamma(1.0 + shape) * u.pow(1.0 / shape)
-    }
-    val d = shape - 1.0 / 3.0
-    val c = 1.0 / kotlin.math.sqrt(9.0 * d)
-    while (true) {
-        var x: Double
-        var v: Double
-        do {
-            x = Random.nextGaussian()
-            v = 1.0 + c * x
-        } while (v <= 0.0)
-        v = v * v * v
-        val u = Random.nextDouble()
-        if (u < 1.0 - 0.0331 * (x * x) * (x * x)) return d * v
-        if (ln(u) < 0.5 * x * x + d * (1.0 - v + ln(v))) return d * v
-    }
-}
-
-private fun Random.nextGaussian(): Double {
-    val u1 = nextDouble()
-    val u2 = nextDouble()
-    return kotlin.math.sqrt(-2.0 * ln(u1)) * kotlin.math.cos(2.0 * Math.PI * u2)
+                "timeAdded=$timeAdded"
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -175,6 +127,12 @@ fun getLCB(value: Double, est: Double): Double {
     return klBinarySearch(est, value, searchHigh = false)
 }
 
+private fun Random.nextGaussian(): Double {
+    val u1 = nextDouble()
+    val u2 = nextDouble()
+    return kotlin.math.sqrt(-2.0 * ln(u1)) * kotlin.math.cos(2.0 * Math.PI * u2)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // KLUCBBandit
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,18 +141,9 @@ class KLUCBBandit {
 
     private val nodes = mutableMapOf<Int, KLUCBNode>()
 
-    // FIX (Issues 2 & 4): Use fixed pg/ps from KnowledgeRepository instead of
-    // sampling from Beta(20,160).  This makes CUSUM mastery thresholds
-    // deterministic and predictable across every session.
     fun addArm(kcId: Int, timeAdded: Int) {
         if (kcId !in nodes) {
-            val pg = KnowledgeRepository.getGuessProb(kcId)
-            val ps = KnowledgeRepository.getSlipProb(kcId)
-            nodes[kcId] = KLUCBNode(
-                timeAdded = timeAdded,
-                pg        = pg,
-                ps        = ps
-            )
+            nodes[kcId] = KLUCBNode(timeAdded = timeAdded)
         }
     }
 
@@ -206,12 +155,6 @@ class KLUCBBandit {
     fun activeArms(): Set<Int>     = nodes.keys.toSet()
     fun getNode(kcId: Int): KLUCBNode? = nodes[kcId]
 
-    // FIX (Issue 1): Added starvation prevention.
-    // Previously, after one wrong answer on KC A (estimate → 0.0), the UCB of
-    // KC B would always dominate and KC A would never be selected again.
-    // Now: if the least-played arm has been played 3+ fewer times than the
-    // most-played arm, we force-select it regardless of UCB values.
-    // This guarantees every concept gets a fair share of questions.
     fun selectConcept(zpd: List<Int>, ts: Int): Int {
         val active = zpd.filter { it in nodes }
         if (active.isEmpty()) {
@@ -222,15 +165,26 @@ class KLUCBBandit {
         active.firstOrNull { nodes[it]!!.timesPlayed == 0 }
             ?.let { return it }
 
-        // FIX (Issue 1): Starvation prevention — if any arm is lagging 3+
-        // plays behind the most-played arm, force it next.
-        val maxPlays = active.maxOf { nodes[it]!!.timesPlayed }
-        val starved  = active.firstOrNull { nodes[it]!!.timesPlayed <= maxPlays - 3 }
-        if (starved != null) return starved
-
-        // Normal UCB selection
+        // Compute UCB for all active arms
         active.forEach { kcId -> nodes[kcId]?.computeUCB(ts) }
-        return active.maxByOrNull { nodes[it]?.ucb ?: Double.MIN_VALUE } ?: active.first()
+
+        // Log UCB values
+        active.forEach { kcId ->
+            val node = nodes[kcId]
+            if (node != null) {
+                android.util.Log.i(
+                    "KLUCBBandit",
+                    "KC $kcId | timesPlayed=${node.timesPlayed} " +
+                            "est=${"%.3f".format(node.estimate)} " +
+                            "ucb=${"%.3f".format(node.ucb)} " +
+                            "lcb=${"%.3f".format(node.lcb)}"
+                )
+            }
+        }
+
+        val selected = active.maxByOrNull { nodes[it]?.ucb ?: Double.MIN_VALUE } ?: active.first()
+        android.util.Log.i("KLUCBBandit", "→ Selected KC $selected")
+        return selected
     }
 
     fun update(kcId: Int, correct: Boolean) {

@@ -184,11 +184,10 @@ class AdaptiveEngine {
     private fun addArmIfNeeded(kcId: Int) {
         if (!bandit.hasArm(kcId)) {
             bandit.addArm(kcId, ts)
-            // Read the fixed pg/ps back from the node (which now stores KC values)
-            val node = bandit.getNode(kcId)!!
+            val kc = KnowledgeRepository.components[kcId]!!
             cusumDetectors[kcId] = CUSUMDetector(
-                pg        = node.pg,
-                ps        = node.ps,
+                pg        = kc.guessProbability,
+                ps        = kc.slipProbability,
                 threshold = beta
             )
         }
