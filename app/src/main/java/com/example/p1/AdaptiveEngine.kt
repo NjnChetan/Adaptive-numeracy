@@ -7,10 +7,37 @@ class AdaptiveEngine {
 
     private val TAG = "AdaptiveSystem"
 
-    private val masteredKCs = mutableSetOf<Int>()
-    private fun isMastered(kcId: Int): Boolean = kcId in masteredKCs
-    private fun setMastered(kcId: Int) { masteredKCs.add(kcId) }
-    private fun resetStudent() { masteredKCs.clear() }
+    // ── Inlined "StudentModel" state (mastery + BKT belief per KC) ──────────
+    private val kcStates: MutableMap<Int, Boolean> = mutableMapOf<Int, Boolean>().apply {
+        for (id in 1..37) put(id, false)
+    }
+    private val bktBelief: MutableMap<Int, Double> = mutableMapOf<Int, Double>().apply {
+        for (id in 1..37) put(id, 0.0)
+    }
+
+    private fun isMastered(kcId: Int): Boolean = kcStates[kcId] == true
+
+    private fun setMastered(kcId: Int) {
+        kcStates[kcId] = true
+        bktBelief[kcId] = 1.0
+    }
+
+    private fun resetStudent() {
+        for (id in 1..37) {
+            kcStates[id] = false
+            bktBelief[id] = 0.0
+        }
+    }
+
+    private fun bktUpdateBelief(kcId: Int, correct: Boolean) {
+        if (kcStates[kcId] == true) return
+        val tp = KnowledgeRepository.getTransition(kcId)
+        val prereqs = KnowledgeRepository.getPrerequisites(kcId)
+        val pT = if (prereqs.any { kcStates[it] != true }) tp.low else tp.high
+        val prior = bktBelief[kcId] ?: 0.0
+        bktBelief[kcId] = prior + pT * (1.0 - prior)
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     private val fpr   = 0.00009
     private val beta  = CUSUMDetector.thresholdFromFPR(fpr)  // ≈ 9.32
@@ -26,9 +53,6 @@ class AdaptiveEngine {
         private set
     private var assessmentResponseString = ""
 
-    // FIX (Issue 3): Guard flag — prevents handleTerminalAssessment() from
-    // being called twice (once from submitAnswer and once from
-    // generateAssessmentQuestion when it sees the same Terminal state).
     private var terminalHandled = false
 
     // ── Confirmation state ────────────────────────────────────────────────────
@@ -79,7 +103,7 @@ class AdaptiveEngine {
         focusQuestionCount = 0
         consecutiveWrong = 0
         pendingConfirmKC = null
-        terminalHandled = false  // FIX (Issue 3): reset guard on new session
+        terminalHandled = false
         currentPhase = if (digitMode == 1 || digitMode == 2) Phase.LEARNING else Phase.ASSESSMENT
         assessmentResponseString = ""
         assessmentProvedAllMastered = false
@@ -88,11 +112,25 @@ class AdaptiveEngine {
     }
 
     private fun activeKCIds(): List<Int> {
-        val base = if (operationType == "-") KnowledgeRepository.subtractionIds
-        else KnowledgeRepository.additionIds
+        val base = when (operationType) {
+            "-" -> KnowledgeRepository.subtractionIds
+            "×" -> KnowledgeRepository.multiplicationIds
+            "÷" -> KnowledgeRepository.divisionIds
+            else -> KnowledgeRepository.additionIds
+        }
         return when (digitMode) {
-            1    -> if (operationType == "-") listOf(10, 11) else listOf(1, 2)
-            2    -> if (operationType == "-") (10..15).toList() else (1..6).toList()
+            1 -> when (operationType) {
+                "-" -> listOf(10, 11)
+                "×" -> listOf(18, 19, 20, 21)
+                "÷" -> listOf(29, 31)
+                else -> listOf(1, 2)
+            }
+            2 -> when (operationType) {
+                "-" -> (10..15).toList()
+                "×" -> listOf(18, 19, 20, 21, 22, 23, 24)
+                "÷" -> listOf(29, 30, 31, 32, 33)
+                else -> (1..6).toList()
+            }
             else -> base
         }
     }
@@ -179,11 +217,6 @@ class AdaptiveEngine {
         return prereqs.any { isAncestor(ancestor, it) }
     }
 
-    // FIX (Issues 2 & 4): addArmIfNeeded now passes pg/ps from the
-    // KnowledgeComponent (fixed values) to both KLUCBBandit and CUSUMDetector.
-    // Previously, KLUCBBandit.addArm() sampled from Beta(20,160) and then
-    // CUSUMDetector read those random values — making mastery timing
-    // non-deterministic.  Now both objects use the same fixed KC parameters.
     private fun addArmIfNeeded(kcId: Int) {
         if (!bandit.hasArm(kcId)) {
             bandit.addArm(kcId, ts)
@@ -197,11 +230,11 @@ class AdaptiveEngine {
     }
 
     private fun getNextAssessmentState(responseString: String): BoundaryState {
-        val isAddition = operationType == "+"
-        return if (isAddition) {
-            BoundaryDetector.getAdditionState(responseString)
-        } else {
-            BoundaryDetector.getSubtractionState(responseString)
+        return when (operationType) {
+            "+"  -> BoundaryDetector.getAdditionState(responseString)
+            "×"  -> BoundaryDetector.getMultiplicationState(responseString)
+            "÷"  -> BoundaryDetector.getDivisionState(responseString)
+            else -> BoundaryDetector.getSubtractionState(responseString)
         }
     }
 
@@ -259,11 +292,11 @@ class AdaptiveEngine {
         val (num1, num2) = generateNumbersForKC(currentKC)
         lastNum1 = num1; lastNum2 = num2
         val op = KnowledgeRepository.getOperationType(currentKC)
-        correctAnswer = if (op == "-") num1 - num2 else num1 + num2
+        correctAnswer = when (op) { "-" -> num1 - num2; "×" -> num1 * num2; "÷" -> num1 / num2; else -> num1 + num2 }
 
-        val opSymbol = if (op == "-") "−" else "+"
+        val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; "÷" -> "÷"; else -> "+" }
         val question = "$num1 $opSymbol $num2 = ?"
-        lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
+        lastQuestionText = "$num1${when (op) { "-" -> "-"; "×" -> "x"; "÷" -> "/"; else -> "+" }}$num2"
 
         val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
         val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -281,11 +314,11 @@ class AdaptiveEngine {
             val (num1, num2) = generateNumbersForKC(currentKC)
             lastNum1 = num1; lastNum2 = num2
             val op = KnowledgeRepository.getOperationType(currentKC)
-            correctAnswer = if (op == "-") num1 - num2 else num1 + num2
+            correctAnswer = when (op) { "-" -> num1 - num2; "×" -> num1 * num2; "÷" -> num1 / num2; else -> num1 + num2 }
 
-            val opSymbol = if (op == "-") "−" else "+"
+            val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; "÷" -> "÷"; else -> "+" }
             val question = "$num1 $opSymbol $num2 = ?"
-            lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
+            lastQuestionText = "$num1${when (op) { "-" -> "-"; "×" -> "x"; "÷" -> "/"; else -> "+" }}$num2"
 
             val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
             val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -303,11 +336,11 @@ class AdaptiveEngine {
                 val (num1, num2) = generateNumbersForKC(currentKC)
                 lastNum1 = num1; lastNum2 = num2
                 val op = KnowledgeRepository.getOperationType(currentKC)
-                correctAnswer = if (op == "-") num1 - num2 else num1 + num2
+                correctAnswer = when (op) { "-" -> num1 - num2; "×" -> num1 * num2; "÷" -> num1 / num2; else -> num1 + num2 }
 
-                val opSymbol = if (op == "-") "−" else "+"
+                val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; "÷" -> "÷"; else -> "+" }
                 val question = "$num1 $opSymbol $num2 = ?"
-                lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
+                lastQuestionText = "$num1${when (op) { "-" -> "-"; "×" -> "x"; "÷" -> "/"; else -> "+" }}$num2"
 
                 val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
                 val options = (listOf(correctAnswer) + distractors).shuffled()
@@ -315,11 +348,6 @@ class AdaptiveEngine {
                 Pair(question, options)
             }
             is BoundaryState.Terminal -> {
-                // FIX (Issue 3): Only call handleTerminalAssessment once.
-                // Without this guard, if submitAnswer() already called it and
-                // set currentPhase = LEARNING, generateQuestion() would still
-                // route here (phase flips between calls), invoking it a second
-                // time and resetting CUSUM detectors that were just created fresh.
                 if (!terminalHandled) {
                     terminalHandled = true
                     handleTerminalAssessment(state)
@@ -345,8 +373,6 @@ class AdaptiveEngine {
                 Log.d(TAG, "Assessment path updated: $assessmentResponseString")
 
                 val nextState = getNextAssessmentState(assessmentResponseString)
-                // FIX (Issue 3): Guard against double-call — only handle if not
-                // already handled by a prior generateAssessmentQuestion() call.
                 if (nextState is BoundaryState.Terminal && !terminalHandled) {
                     terminalHandled = true
                     handleTerminalAssessment(nextState)
@@ -360,6 +386,7 @@ class AdaptiveEngine {
         // ── LEARNING phase ────────────────────────────────────────────────────
 
         bandit.update(currentKC, isCorrect)
+        bktUpdateBelief(currentKC, isCorrect)
 
         val mastered = cusumDetectors[currentKC]?.update(isCorrect) ?: false
 
@@ -403,12 +430,6 @@ class AdaptiveEngine {
             cusumDetectors.remove(kcId)
         }
 
-        // FIX (Issue 3): Explicitly remove any bandit arms and CUSUM detectors
-        // for the boundary KCs that are about to enter the learning ZPD, so
-        // that initZPD() → addArmIfNeeded() creates them completely fresh with
-        // clean state.  Without this, a stale arm created during initZPD() at
-        // session start (before any questions were asked) would persist, and its
-        // timeAdded counter would be wrong relative to the post-assessment ts.
         val boundaryNotPremastered = terminal.boundary.filter { it !in toPremaster }
         for (kcId in boundaryNotPremastered) {
             bandit.removeArm(kcId)
@@ -416,7 +437,7 @@ class AdaptiveEngine {
         }
 
         currentPhase = Phase.LEARNING
-        initZPD()  // creates fresh arms + detectors for the new ZPD
+        initZPD()
 
         if (filterIds.all { isMastered(it) }) {
             Log.i(TAG, "🎓 Assessment proved ALL KCs mastered for digitMode=$digitMode!")
@@ -586,6 +607,24 @@ class AdaptiveEngine {
             return c
         }
 
+        fun hasMulCarry(num: Int, digit: Int): Boolean {
+            var x = num
+            while (x > 0) {
+                if ((x % 10) * digit >= 10) return true
+                x /= 10
+            }
+            return false
+        }
+
+        fun mulCarryCount(num: Int, digit: Int): Int {
+            var x = num; var c = 0
+            while (x > 0) {
+                if ((x % 10) * digit >= 10) c++
+                x /= 10
+            }
+            return c
+        }
+
         fun safePair(gen: () -> Pair<Int, Int>, predicate: (Int, Int) -> Boolean): Pair<Int, Int> {
             var a: Int; var b: Int; var attempts = 0
             do {
@@ -600,6 +639,7 @@ class AdaptiveEngine {
         }
 
         return when (kcId) {
+            // ── ADDITION ─────────────────────────────────────────────────
             1  -> safePair({ Pair((1..9).random(), (1..9).random()) }) { a, b -> a + b < 10 }
             2  -> safePair({ Pair((1..9).random(), (1..9).random()) }) { a, b -> a + b >= 10 }
             3  -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> !hasCarry(a, b) }
@@ -609,6 +649,8 @@ class AdaptiveEngine {
             7  -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> !hasCarry(a, b) }
             8  -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b -> carryCount(a, b) == 1 }
             9  -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> carryCount(a, b) >= 2 }
+
+            // ── SUBTRACTION ──────────────────────────────────────────────
             10 -> safePair({ Pair((2..9).random(), (1..9).random()) }) { a, b -> b < a }
             11 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> !hasBorrow(a, b) }
             12 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> hasBorrow(a, b) && a - b >= 1 }
@@ -617,6 +659,31 @@ class AdaptiveEngine {
             15 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> hasBorrow(a, b) && a > b }
             16 -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> borrowCount(a, b) == 1 && a > b }
             17 -> safePair({ Pair(nDigit(3), nDigit(3)) }) { a, b -> borrowCount(a, b) >= 2 && a > b }
+
+            // ── MULTIPLICATION ───────────────────────────────────────────
+            18 -> safePair({ Pair((1..5).random(), (1..9).random()) }) { _, _ -> true }
+            19 -> safePair({ Pair((5..10).random(), (1..9).random()) }) { _, _ -> true }
+            20 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> !hasMulCarry(a, b) }
+            21 -> safePair({ Pair(nDigit(2), (1..9).random()) }) { a, b -> hasMulCarry(a, b) }
+            22 -> safePair({ Pair(nDigit(3), (1..9).random()) }) { a, b -> !hasMulCarry(a, b) }
+            23 -> safePair({ Pair(nDigit(3), (1..9).random()) }) { a, b -> mulCarryCount(a, b) == 1 }
+            24 -> safePair({ Pair(nDigit(3), (1..9).random()) }) { a, b -> mulCarryCount(a, b) >= 2 }
+            25 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> !hasMulCarry(a, b % 10) && !hasMulCarry(a, b / 10) }
+            26 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b -> hasMulCarry(a, b % 10) || hasMulCarry(a, b / 10) }
+            27 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b -> !hasMulCarry(a, b % 10) && !hasMulCarry(a, b / 10) }
+            28 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b -> hasMulCarry(a, b % 10) || hasMulCarry(a, b / 10) }
+
+            // ── DIVISION ──────────────────────────────────────────────────
+            29 -> safePair({ Pair(nDigit(2), (2..9).random()) }) { a, b -> a % b == 0 }
+            30 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b -> a % b == 0 }
+            31 -> safePair({ Pair(nDigit(2), (2..9).random()) }) { a, b -> a % b != 0 }
+            32 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b -> a % b != 0 }
+            33 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b -> a % b != 0 && (a / b).toString().contains('0') }
+            34 -> safePair({ Pair(nDigit(4), (2..9).random()) }) { a, b -> a % b != 0 }
+            35 -> safePair({ Pair(nDigit(3), (10..99).random()) }) { a, b -> a % b == 0 }
+            36 -> safePair({ Pair(nDigit(3), (10..99).random()) }) { a, b -> a % b != 0 }
+            37 -> safePair({ Pair(nDigit(4), (10..99).random()) }) { a, b -> a % b != 0 }
+
             else -> Pair(1, 1)
         }
     }
