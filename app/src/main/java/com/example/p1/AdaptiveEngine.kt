@@ -1,9 +1,19 @@
 package com.example.p1
 
-import android.util.Log
 import kotlin.math.pow
 
 class AdaptiveEngine {
+
+    private object Log {
+        fun i(tag: String, msg: String) {
+            if (msg.startsWith("  mastered  =")) {
+                android.util.Log.i(tag, msg)
+            }
+        }
+        fun d(tag: String, msg: String) {}
+        fun w(tag: String, msg: String) {}
+        fun e(tag: String, msg: String, tr: Throwable? = null) {}
+    }
 
     private val TAG = "AdaptiveSystem"
 

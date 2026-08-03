@@ -36,7 +36,7 @@ class SessionLogger(context: Context) {
             // Write CSV header
             writer?.appendLine("log-type,timestamp,field-1,field-2,field-3,field-4,field-5,field-6,field-7")
             writer?.flush()
-            Log.i(TAG, "Session log started: ${currentFile?.absolutePath}")
+            // Log.i(TAG, "Session log started: ${currentFile?.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start session log", e)
         }
@@ -52,7 +52,9 @@ class SessionLogger(context: Context) {
             val line = padded.joinToString(",") { escapeCSV(it) }
             writer?.appendLine(line)
             writer?.flush()
-            Log.d(TAG, "CSV: $line")
+            if (line.startsWith("PRACTICE") || line.startsWith("\"PRACTICE\"")) {
+                Log.d(TAG, "CSV: $line")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write log line", e)
         }
@@ -128,7 +130,7 @@ class SessionLogger(context: Context) {
             writer?.flush()
             writer?.close()
             writer = null
-            Log.i(TAG, "Session log ended: ${currentFile?.absolutePath}")
+            // Log.i(TAG, "Session log ended: ${currentFile?.absolutePath}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to end session log", e)
         }
