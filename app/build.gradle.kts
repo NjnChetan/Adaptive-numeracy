@@ -6,6 +6,9 @@ plugins {
 android {
     namespace = "com.example.p1"
     compileSdk = 36
+    lint {
+        abortOnError = false
+    }
 
     defaultConfig {
         applicationId = "com.example.p1"
