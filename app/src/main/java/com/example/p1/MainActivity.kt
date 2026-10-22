@@ -83,6 +83,23 @@ class MainActivity : AppCompatActivity() {
         val startBtn   = panel.findViewById<MaterialButton>(R.id.startBtn) ?: return
         val opGrid     = panel.findViewById<android.widget.LinearLayout>(R.id.opGrid)
 
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
+
+        var rawQuestion = ""
+
+        // Horizontal panel: 28+5   Vertical panel: stacked
+        fun formatQuestion(q: String): String {
+            val m = Regex("""(\d+)\s*(\S)\s*(\d+)""").find(q) ?: return q
+            val (a, op, b) = m.destructured
+            val horizontal = panelContent.width > panelContent.height
+            return if (!horizontal) {
+                val w = maxOf(a.length, b.length)
+                " " + a.padStart(w) + "\n" + op + b.padStart(w)
+            } else {
+                "$a$op$b"
+            }
+        }
+
         // Set op grid layout based on orientation: portrait=2x2, landscape=1x4
         fun applyOpGridOrientation() {
             val isLandscape = resources.configuration.orientation ==
@@ -374,6 +391,7 @@ class MainActivity : AppCompatActivity() {
             btnRow2?.visibility = View.GONE
             cardBorder?.background = normalBorder
             questionText.setTextColor(Color.parseColor("#2B3A8C"))
+            questionText.tag = null
             questionText.text = loc("🎉 All concepts mastered!")
 
             lifecycleScope.launch(Dispatchers.Main) {
@@ -390,6 +408,7 @@ class MainActivity : AppCompatActivity() {
             btnRow2?.visibility = View.GONE
             cardBorder?.background = normalBorder
             questionText.setTextColor(Color.parseColor("#2E7D32"))
+            questionText.tag = null
             questionText.text = loc("Super! You have learned it all!")
 
             lifecycleScope.launch(Dispatchers.Main) {
@@ -430,6 +449,7 @@ class MainActivity : AppCompatActivity() {
                         btnRow2?.visibility = View.GONE
                         cardBorder?.background = normalBorder
                         questionText.setTextColor(Color.parseColor("#2B3A8C"))
+                        questionText.tag = null
                         questionText.text = loc("\n\nPractice Starts")
                     }
                     kotlinx.coroutines.delay(5000)
@@ -447,6 +467,7 @@ class MainActivity : AppCompatActivity() {
                         btnRow2?.visibility = View.GONE
                         cardBorder?.background = normalBorder
                         questionText.setTextColor(Color.parseColor("#2B3A8C"))
+                        questionText.tag = null
                         questionText.text = loc("\n\nLet's test what you know!")
                     }
                     kotlinx.coroutines.delay(4000)
@@ -479,7 +500,13 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     cardBorder?.background = normalBorder
                     questionText.setTextColor(Color.parseColor("#1A1A2E"))
-                    questionText.text = loc(question)
+                    questionText.setAutoSizeTextTypeUniformWithConfiguration(
+                        24, 160, 1, TypedValue.COMPLEX_UNIT_SP
+                    )
+                    questionText.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                    rawQuestion = question
+                    questionText.tag = "q"
+                    questionText.text = loc(formatQuestion(question))
                     scoreText?.text = loc("Q: ${total + 1}")
 
                     conceptsContainer?.removeAllViews()
@@ -653,6 +680,7 @@ class MainActivity : AppCompatActivity() {
                                         cardBorder?.background = correctBorder
                                     } else {
                                         cardBorder?.background = wrongBorder
+                                        questionText.tag = null
                                         questionText.text = loc(engine.correctAnswer.toString())
                                         questionText.setTextColor(Color.parseColor("#C62828"))
                                     }
@@ -669,7 +697,7 @@ class MainActivity : AppCompatActivity() {
                                         // ── Kid-friendly mastery messages ──
                                         title?.text = loc("Well Done!")
                                         msg1?.text = loc("You learned this!")
-                                        msg2?.text = loc("Now let's try something new.")
+                                        msg2?.visibility = View.GONE
 
                                         overlay?.alpha = 0f
                                         overlay?.visibility = View.VISIBLE
@@ -695,7 +723,7 @@ class MainActivity : AppCompatActivity() {
                                         loadQuestion()
                                     }
                                 } else {
-                                    kotlinx.coroutines.delay(900)
+                                    kotlinx.coroutines.delay(if (ok) 900L else 2500L)
                                     withContext(Dispatchers.Main) { loadQuestion() }
                                 }
                             }
@@ -761,6 +789,11 @@ class MainActivity : AppCompatActivity() {
             val visH = if (portrait) w else h
             applyScaledText(visW, visH)
             panelContent.animate().rotation(cumulativeDeg).scaleX(1f).scaleY(1f).setDuration(350).start()
+            panelContent.post {
+                if (questionText.tag == "q" && rawQuestion.isNotEmpty()) {
+                    questionText.text = loc(formatQuestion(rawQuestion))
+                }
+            }
         }
 
         clipView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -785,8 +818,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-
-        val isPhone = resources.configuration.smallestScreenWidthDp < 600
 
         val doRotate = {
             val w = clipView.width; val h = clipView.height
