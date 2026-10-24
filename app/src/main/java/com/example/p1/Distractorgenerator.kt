@@ -9,49 +9,27 @@ object DistractorGenerator {
         val b = minOf(num1, num2)
 
         val raw = when (kcId) {
-            // ── ADDITION ─────────────────────────────────────────────────
+            // ── ADDITION distractors ─────────────────────────────────────────
             1     -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2))
-            2     -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2))
-            3     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1))
-            4     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1))
-            5     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
-            6     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
-            7     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
-            8     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
-            9     -> addWrongPlaceValue(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
+            // carry KCs: forgot carry / extra carry first, then off-by-one
+            2     -> carryConfusion(a, b, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1, 2))
+            3     -> offByOneGeneric(correctAnswer, listOf(-1, 1)) + addWrongPlaceValue(a, b, correctAnswer)
+            4     -> carryConfusion(a, b, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1)) + addWrongPlaceValue(a, b, correctAnswer)
+            5     -> offByOneMultidigit(correctAnswer) + addWrongPlaceValue(a, b, correctAnswer)
+            6     -> carryConfusion(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
+            7     -> offByOneMultidigit(correctAnswer) + addWrongPlaceValue(a, b, correctAnswer)
+            8     -> carryConfusion(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
+            9     -> carryConfusion(a, b, correctAnswer) + offByOneMultidigit(correctAnswer)
 
-            // ── SUBTRACTION ──────────────────────────────────────────────
+            // ── SUBTRACTION distractors ─────────────────────────────────────
             10    -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2)) + listOf(num1 + num2)
             11    -> subWrongPlaceValue(num1, num2, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1)) + listOf(num1 + num2)
-            12    -> borrowConfusion(num1, num2, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1)) + listOf(num1 + num2)
-            13    -> subWrongPlaceValue(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-            14    -> subWrongPlaceValue(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-            15    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-            16    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-            17    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-
-            // ── MULTIPLICATION ───────────────────────────────────────────
-            18, 19 -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2)) +
-                    listOf(num1 + num2, num1 * (num2 + 1), num1 * maxOf(num2 - 1, 0))
-            20, 22 -> offByOneGeneric(correctAnswer, listOf(-1, 1)) + listOf(num1 + num2)
-            21, 23, 24 -> offByOneGeneric(correctAnswer, listOf(-1, 1)) +
-                    listOf(num1 + num2, correctAnswer - 10, correctAnswer + 10)
-            25, 27 -> offByOneMultidigit(correctAnswer) + listOf(num1 + num2)
-            26, 28 -> offByOneMultidigit(correctAnswer) +
-                    listOf(num1 + num2, correctAnswer - 10, correctAnswer + 10)
-
-            // ── DIVISION ──────────────────────────────────────────────────
-            29, 30 -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2)) +
-                    listOf(num1 - num2, num1 + num2)
-            31, 32, 34 -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2)) +
-                    listOf(num1 - num2, num1 + num2, correctAnswer + 10, correctAnswer - 10)
-            33 -> run {
-                val qStr = correctAnswer.toString()
-                val noZero = qStr.replace("0", "").toIntOrNull() ?: correctAnswer
-                offByOneGeneric(correctAnswer, listOf(-1, 1)) + listOf(noZero, num1 - num2, num1 + num2)
-            }
-            35, 36, 37 -> offByOneGeneric(correctAnswer, listOf(-1, 1)) + offByOneMultidigit(correctAnswer) +
-                    listOf(num1 - num2, num1 + num2)
+            12    -> borrowConfusion(num1, num2, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1))
+            13    -> listOf(num1 + num2) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
+            14    -> listOf(num1 + num2) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
+            15    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer)
+            16    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
+            17    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
 
             else  -> offByOneGeneric(correctAnswer, listOf(-1, 1, 2, 3))
         }
@@ -70,6 +48,74 @@ object DistractorGenerator {
         }
 
         return filtered.take(needed)
+    }
+
+    /**
+     * Multiplication / division distractors (no KCs exist for these yet,
+     * so they are keyed by operator: "×" or "÷").
+     */
+    fun generateForOp(op: String, num1: Int, num2: Int, correctAnswer: Int, needed: Int = 3): List<Int> {
+        val raw = when (op) {
+            "×", "x", "*" -> mulDistractors(num1, num2, correctAnswer)
+            "÷", "/"      -> divDistractors(num1, num2, correctAnswer)
+            else          -> offByOneGeneric(correctAnswer, listOf(-1, 1, 2))
+        }
+        val filtered = raw.filter { it >= 0 && it != correctAnswer }.distinct().toMutableList()
+        var offset = 1
+        while (filtered.size < needed) {
+            val c = correctAnswer + offset
+            if (c >= 0 && c !in filtered) filtered.add(c)
+            offset++
+        }
+        return filtered.take(needed)
+    }
+
+    private fun mulDistractors(a: Int, b: Int, correct: Int): List<Int> {
+        val r = mutableListOf<Int>()
+        r.add(a * (b + 1))              // table neighbour
+        if (b > 1) r.add(a * (b - 1))   // table neighbour
+        r.add((a + 1) * b)
+        if (a > 1) r.add((a - 1) * b)
+        r.add(a + b)                    // added instead of multiplied
+        if (correct >= 10) { r.add(correct + 10); r.add(correct - 10) }  // carry / place error
+        r.add(correct + 1); r.add(correct - 1)
+        return r
+    }
+
+    private fun divDistractors(a: Int, b: Int, correct: Int): List<Int> {
+        val r = mutableListOf<Int>()
+        r.add(correct + 1); r.add(correct - 1)
+        r.add(a - b)                    // subtracted instead of divided
+        r.add(a * b)                    // multiplied instead of divided
+        r.add(b)                        // returned divisor
+        r.add(correct * 10)             // place-value slip
+        if (correct >= 10) r.add(correct / 10)
+        r.add(correct + 2)
+        return r
+    }
+
+    fun getMisconceptionForOp(op: String, num1: Int, num2: Int, correct: Int, selected: Int): String {
+        if (selected == correct) return ""
+        val diff = selected - correct
+        return when (op) {
+            "×", "x", "*" -> when {
+                selected == num1 + num2 -> "Add-instead-of-multiply"
+                selected == num1 * (num2 + 1) || selected == num1 * (num2 - 1) ||
+                        selected == (num1 + 1) * num2 || selected == (num1 - 1) * num2 -> "Table-neighbour"
+                diff == 10 || diff == -10 || diff == 100 || diff == -100 -> "Carry/Place-error"
+                diff == 1 || diff == -1 -> "Off-by-one"
+                else -> "Other-error"
+            }
+            "÷", "/" -> when {
+                selected == num1 * num2 -> "Multiply-instead-of-divide"
+                selected == num1 - num2 -> "Subtract-instead-of-divide"
+                selected == num2 -> "Returned-divisor"
+                diff == 1 || diff == -1 -> "Off-by-one"
+                selected == correct * 10 || (correct >= 10 && selected == correct / 10) -> "Place-value-error"
+                else -> "Other-error"
+            }
+            else -> "Other-error"
+        }
     }
 
     private fun offByOneGeneric(correct: Int, offsets: List<Int>): List<Int> =
@@ -100,11 +146,33 @@ object DistractorGenerator {
         return result.filter { it >= 0 && it != correct }
     }
 
-    private fun subWrongPlaceValue(num1: Int, num2: Int, correct: Int): List<Int> {
-        val diff = num1.toString().length - num2.toString().length
+    /**
+     * Addition carry confusion:
+     *  - forgot carry: column sums mod 10, carry dropped  (98+6 → 94)
+     *  - extra carry:  correct + 10                        (98+6 → 114)
+     *  - carry written in place instead of added: correct − 10×k for each carry
+     */
+    private fun carryConfusion(num1: Int, num2: Int, correct: Int): List<Int> {
         val result = mutableListOf<Int>()
-        for (i in 0 until diff) {
-            val wrong = num1 - num2 * 10.0.pow(i + 1).toInt()
+        var x = num1; var y = num2; var place = 1; var noCarry = 0
+        while (x > 0 || y > 0) {
+            noCarry += ((x % 10 + y % 10) % 10) * place
+            x /= 10; y /= 10; place *= 10
+        }
+        if (noCarry != correct) result.add(noCarry)
+        result.add(correct + 10)
+        if (correct >= 10) result.add(correct - 10)
+        return result.filter { it >= 0 && it != correct }
+    }
+
+    /**
+     * Subtraction wrong place value — second number subtracted from the wrong
+     * column (shifted left by 1 or 2 places): num1 − num2×10, num1 − num2×100.
+     */
+    private fun subWrongPlaceValue(num1: Int, num2: Int, correct: Int): List<Int> {
+        val result = mutableListOf<Int>()
+        for (k in 1..2) {
+            val wrong = num1 - num2 * 10.0.pow(k).toInt()
             if (wrong >= 0) result.add(wrong)
         }
         val reverseResult = num2 - num1
@@ -112,6 +180,7 @@ object DistractorGenerator {
         return result.filter { it >= 0 && it != correct }
     }
 
+    /** Borrow confusion — forgot to borrow, giving wrong digit at borrow position */
     private fun borrowConfusion(num1: Int, num2: Int, correct: Int): List<Int> {
         val result = mutableListOf<Int>()
         val s1 = num1.toString().padStart(3, '0')
@@ -125,11 +194,20 @@ object DistractorGenerator {
         }
         if (noBorrow != correct && noBorrow >= 0) result.add(noBorrow)
 
+        // borrowed but forgot to reduce the next digit
+        result.add(correct + 10)
+        // reduced next digit without borrowing
+        if (correct >= 10) result.add(correct - 10)
+        // added instead of subtracted
         result.add(num1 + num2)
 
         return result.filter { it >= 0 && it != correct }
     }
 
+    /**
+     * Identifies the misconception behind a wrong answer.
+     * Returns a human-readable label for the CSV log.
+     */
     fun getMisconception(kcId: Int, num1: Int, num2: Int, correctAnswer: Int, selectedAnswer: Int): String {
         if (selectedAnswer == correctAnswer) return ""
 
@@ -138,95 +216,20 @@ object DistractorGenerator {
 
         if (op == "-" && selectedAnswer == num1 + num2) return "Add-instead-of-subtract"
         if (op == "+" && selectedAnswer == num1 - num2) return "Subtract-instead-of-add"
-        if (op == "×" && selectedAnswer == num1 + num2) return "Add-instead-of-multiply"
-        if (op == "÷" && selectedAnswer == num1 - num2) return "Subtract-instead-of-divide"
-        if (op == "÷" && selectedAnswer == num1 + num2) return "Add-instead-of-divide"
 
-        if (op == "×") {
-            if (kcId == 18 || kcId == 19) {
-                for (wrongFactor in 1..10) {
-                    if (wrongFactor != num2 && num1 * wrongFactor == selectedAnswer) return "Confused-table"
-                }
-            }
+        if (op == "-" && (selectedAnswer == num1 - num2 * 10 || selectedAnswer == num1 - num2 * 100))
+            return "Wrong-place-value"
 
-            if (num1 * (num2 + 1) == selectedAnswer || num1 * (num2 - 1) == selectedAnswer) return "Off-by-one-factor"
-
-            if (kcId in listOf(21, 23, 24, 26, 28)) {
-                val noCarryProduct = run {
-                    var x = num1; var result = 0; var place = 1
-                    while (x > 0) {
-                        val digit = x % 10
-                        result += (digit * num2 % 10) * place
-                        place *= 10
-                        x /= 10
-                    }
-                    result
-                }
-                if (selectedAnswer == noCarryProduct) return "Forgot-carry"
-            }
-
-            if (kcId in listOf(25, 26, 27, 28)) {
-                val tens = num2 / 10
-                val ones = num2 % 10
-                if (tens > 0) {
-                    val wrongPlaceProduct = num1 * ones + num1 * tens
-                    if (selectedAnswer == wrongPlaceProduct) return "Wrong-place-value-multiply"
-                }
-                if (selectedAnswer == num1 * ones) return "Only-multiplied-ones"
-                if (tens > 0 && selectedAnswer == num1 * tens) return "Only-multiplied-tens"
-
-                if (tens > 0) {
-                    val partial1 = num1 * ones
-                    val partial2 = num1 * tens * 10
-                    val noCarryAdd = run {
-                        var x = partial1; var y = partial2; var result = 0; var place = 1
-                        while (x > 0 || y > 0) {
-                            val d = (x % 10 + y % 10) % 10
-                            result += d * place
-                            place *= 10
-                            x /= 10; y /= 10
-                        }
-                        result
-                    }
-                    if (selectedAnswer == noCarryAdd) return "Forgot-carry-in-addition"
-                }
-            }
+        // Addition: forgot carry / extra carry
+        if (op == "+" && kcId in listOf(2, 4, 6, 8, 9)) {
+            if (diff == -10 || diff == -100) return "Forgot-carry"
+            if (diff == 10 || diff == 100) return "Extra-carry"
         }
 
-        if (op == "÷") {
-            if (diff == 1 || diff == -1) return "Off-by-one"
-
-            if (kcId == 33) {
-                val quotientStr = correctAnswer.toString()
-                if (quotientStr.contains('0')) {
-                    val noZeroQuotient = quotientStr.replace("0", "").toIntOrNull()
-                    if (noZeroQuotient != null && selectedAnswer == noZeroQuotient) return "Forgot-zero-in-quotient"
-                }
-            }
-
-            val correctQuotient = num1 / num2
-
-            run {
-                val noBorrowQuotientDigit = run {
-                    var remainder = 0
-                    var result = 0
-                    for (ch in num1.toString()) {
-                        val digit = ch.digitToInt()
-                        remainder = remainder * 10 + digit
-                        val qDigit = if (remainder >= num2) remainder / num2 else 0
-                        remainder = kotlin.math.abs(remainder - qDigit * num2)
-                        result = result * 10 + qDigit
-                    }
-                    result
-                }
-                if (selectedAnswer == noBorrowQuotientDigit && noBorrowQuotientDigit != correctAnswer) {
-                    return "Subtraction-error-during-division"
-                }
-            }
-
-            if (selectedAnswer == correctQuotient + 10 || selectedAnswer == correctQuotient - 10) {
-                return "Addition-error-during-division"
-            }
+        // Subtraction with borrow: borrowed but didn't reduce / reduced without borrowing
+        if (op == "-" && kcId in listOf(12, 15, 16, 17)) {
+            if (diff == 10 || diff == 100) return "Borrow-not-reduced"
+            if (diff == -10 || diff == -100) return "Extra-borrow"
         }
 
         if (diff == 1 || diff == -1) return "Off-by-one"
@@ -256,10 +259,6 @@ object DistractorGenerator {
                 noBorrow = noBorrow * 10 + d
             }
             if (selectedAnswer == noBorrow) return "Forgot-borrow"
-        }
-
-        if (kcId in listOf(2, 4, 6, 8, 9)) {
-            if (diff == -10 || diff == -100) return "Forgot-carry"
         }
 
         return "Other-error"

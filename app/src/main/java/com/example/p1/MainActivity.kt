@@ -101,9 +101,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Set op grid layout based on orientation: portrait=2x2, landscape=1x4
-        fun applyOpGridOrientation() {
-            val isLandscape = resources.configuration.orientation ==
-                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        fun applyOpGridOrientation(forceLandscape: Boolean? = null) {
+            val isLandscape = forceLandscape ?: (resources.configuration.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE)
             if (isLandscape) {
                 opGrid?.removeAllViews()
                 opGrid?.orientation = android.widget.LinearLayout.HORIZONTAL
@@ -802,7 +802,11 @@ class MainActivity : AppCompatActivity() {
                 val w = clipView.width; val h = clipView.height
                 if ((w != lastW || h != lastH) && w != 0 && h != 0) {
                     lastW = w; lastH = h
-                    if (h > w && (rotationStep == 1 || rotationStep == 3)) rotationStep = 0
+                    // Default orientation: tab -> horizontal, phone -> vertical
+                    rotationStep = if (isPhone) 0 else if (h > w) 1 else 0
+                    cumulativeDeg = rotationStep * 90f
+                    panelContent.rotation = cumulativeDeg
+                    applyOpGridOrientation(if (rotationStep % 2 == 1) h > w else w > h)
                     applyRotation(w, h, rotationStep)
                 }
             }
@@ -826,12 +830,12 @@ class MainActivity : AppCompatActivity() {
                 cumulativeDeg = if (rotationStep == 2) 180f else 360f
                 clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
             } else {
-                rotationStep = if (h > w) { if (rotationStep == 0) 2 else 0 } else (rotationStep + 1) % 4
+                rotationStep = (rotationStep + 1) % 4
                 cumulativeDeg += 90f
                 clipView.post { if (w != 0 && h != 0) applyRotation(w, h, rotationStep) }
             }
-            val panelIsLandscape = (rotationStep == 1 || rotationStep == 3)
-            val effectivelyLandscape = if (isPhone) false else panelIsLandscape
+            val panelIsLandscape = if (rotationStep % 2 == 1) h > w else w > h
+            val effectivelyLandscape = panelIsLandscape
             opGrid?.post {
                 if (effectivelyLandscape) {
                     opGrid.removeAllViews()
