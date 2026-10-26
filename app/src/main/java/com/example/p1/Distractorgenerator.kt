@@ -8,7 +8,9 @@ object DistractorGenerator {
         val a = maxOf(num1, num2)
         val b = minOf(num1, num2)
 
-        val raw = when (kcId) {
+        val raw = if (kcId in 18..28) {
+            multiplicationDistractors(kcId, num1, num2, correctAnswer, needed)
+        } else when (kcId) {
             // ── ADDITION distractors ─────────────────────────────────────────
             1     -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2))
             // carry KCs: forgot carry / extra carry first, then off-by-one
@@ -50,9 +52,94 @@ object DistractorGenerator {
         return filtered.take(needed)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // MULTIPLICATION distractors (KC 18–28)
+    //
+    // Tables (18, 19): neighbour / add-instead-of-multiply style errors.
+    // Multi-digit (20–28): every distractor keeps the SAME LAST DIGIT and the
+    // same number of digits as the correct answer, so the answer can't be
+    // found by checking the last digit. Built from real errors:
+    //   - forgot carries (digit-wise product mod 10)
+    //   - a carry dropped / added in the wrong column (±10, ±100 …)
+    //   - 2-digit multiplier: forgot to shift 2nd partial product,
+    //     shifted it too far, partial products with dropped carries
+    // ─────────────────────────────────────────────────────────────────────────
+    private fun multiplicationDistractors(kcId: Int, num1: Int, num2: Int, correct: Int, needed: Int): List<Int> {
+        if (kcId <= 19) return mulDistractors(num1, num2, correct)
+
+        val cands = mutableListOf<Int>()
+
+        if (num2 < 10) {
+            // single-digit multiplier
+            cands.add(noCarryProduct(num1, num2))          // forgot every carry
+            var x = num1; var carry = 0; var place = 1
+            while (x > 0) {
+                val p = (x % 10) * num2 + carry
+                val co = p / 10
+                if (co > 0) {
+                    cands.add(correct - co * place * 10)   // carry dropped
+                    cands.add(correct + co * place * 10)   // carry counted twice
+                }
+                carry = co; x /= 10; place *= 10
+            }
+        } else {
+            // 2-digit multiplier: num1 × (u*10 + v)
+            val u = num2 / 10
+            val v = num2 % 10
+            cands.add(num1 * v + num1 * u)                 // forgot to shift
+            cands.add(num1 * v + num1 * u * 100)           // shifted too far
+            cands.add(noCarryProduct(num1, v) + noCarryProduct(num1, u) * 10)  // dropped carries
+            cands.add(noCarryProduct(num1, v) + num1 * u * 10)
+            cands.add(num1 * v + noCarryProduct(num1, u) * 10)
+        }
+
+        // carry / place-value slips that keep the last digit
+        for (off in listOf(10, -10, 20, -20, 100, -100, 200, -200)) cands.add(correct + off)
+
+        return pickMul(cands, correct, needed)
+    }
+
+    /** Digit-by-digit product with every carry dropped: each column = (digit × d) mod 10. */
+    private fun noCarryProduct(a: Int, d: Int): Int {
+        var x = a; var place = 1; var r = 0
+        while (x > 0) {
+            r += (((x % 10) * d) % 10) * place
+            x /= 10; place *= 10
+        }
+        return r
+    }
+
+    /** Prefer same last digit + same length as the correct answer. */
+    private fun pickMul(cands: List<Int>, correct: Int, needed: Int): List<Int> {
+        val len = correct.toString().length
+        val last = correct % 10
+        val base = cands.filter { it >= 0 && it != correct }.distinct()
+
+        val out = base
+            .filter { it % 10 == last && it.toString().length == len }
+            .shuffled()
+            .take(needed)
+            .toMutableList()
+
+        if (out.size < needed) {
+            for (off in listOf(10, -10, 20, -20, 30, -30, 40, -40, 100, -100)) {
+                val c = correct + off
+                if (c >= 0 && c != correct && c !in out && c.toString().length == len) out.add(c)
+                if (out.size >= needed) break
+            }
+        }
+        if (out.size < needed) {
+            for (c in base) {
+                if (c !in out) out.add(c)
+                if (out.size >= needed) break
+            }
+        }
+        return out
+    }
+
     /**
-     * Multiplication / division distractors (no KCs exist for these yet,
-     * so they are keyed by operator: "×" or "÷").
+     * Multiplication / division distractors keyed by operator ("×" or "÷").
+     * (Multiplication in the adaptive engine now goes through generate(kcId, …).)
      */
     fun generateForOp(op: String, num1: Int, num2: Int, correctAnswer: Int, needed: Int = 3): List<Int> {
         val raw = when (op) {
@@ -100,9 +187,12 @@ object DistractorGenerator {
         return when (op) {
             "×", "x", "*" -> when {
                 selected == num1 + num2 -> "Add-instead-of-multiply"
+                num2 >= 10 && selected == num1 * (num2 % 10) + num1 * (num2 / 10) -> "Forgot-shift"
+                num2 >= 10 && selected == num1 * (num2 % 10) + num1 * (num2 / 10) * 100 -> "Over-shift"
+                num2 < 10 && selected == noCarryProduct(num1, num2) -> "Forgot-carry"
                 selected == num1 * (num2 + 1) || selected == num1 * (num2 - 1) ||
                         selected == (num1 + 1) * num2 || selected == (num1 - 1) * num2 -> "Table-neighbour"
-                diff == 10 || diff == -10 || diff == 100 || diff == -100 -> "Carry/Place-error"
+                diff % 10 == 0 -> "Carry/Place-error"
                 diff == 1 || diff == -1 -> "Off-by-one"
                 else -> "Other-error"
             }
@@ -213,6 +303,8 @@ object DistractorGenerator {
 
         val diff = selectedAnswer - correctAnswer
         val op = KnowledgeRepository.getOperationType(kcId)
+
+        if (op == "×") return getMisconceptionForOp("×", num1, num2, correctAnswer, selectedAnswer)
 
         if (op == "-" && selectedAnswer == num1 + num2) return "Add-instead-of-subtract"
         if (op == "+" && selectedAnswer == num1 - num2) return "Subtract-instead-of-add"

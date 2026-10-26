@@ -13,6 +13,13 @@ class AdaptiveEngine {
     private fun setMastered(kcId: Int) { masteredKCs.add(kcId) }
     private fun resetStudent() { masteredKCs.clear() }
 
+    /** Prerequisites outside the current level's KC set count as mastered. */
+    private fun masteredInLevel(kcId: Int, filterIds: List<Int>): Boolean =
+        isMastered(kcId) || kcId !in filterIds
+
+    private fun zpdFor(filterIds: List<Int>): List<Int> =
+        KnowledgeRepository.getZPD({ masteredInLevel(it, filterIds) }, filterIds)
+
     private val fpr   = 0.00009
     private val beta  = CUSUMDetector.thresholdFromFPR(fpr)  // ≈ 9.32
 
@@ -66,7 +73,7 @@ class AdaptiveEngine {
 
     // ── Recent-question tracking (no-repeat window) ───────────────────────────
     // Only KCs with tiny problem spaces need this.
-    private val noRepeatKCs   = setOf(1, 2, 10)
+    private val noRepeatKCs   = setOf(1, 2, 10, 18, 19)
     private val recentWindow  = 5
     private val recentPairs   = mutableMapOf<Int, ArrayDeque<Pair<Int, Int>>>()
 
@@ -94,12 +101,26 @@ class AdaptiveEngine {
     }
 
     private fun activeKCIds(): List<Int> {
-        val base = if (operationType == "-") KnowledgeRepository.subtractionIds
-        else KnowledgeRepository.additionIds
+        val isSub = operationType == "-"
+        val isMul = operationType == "×"
+        val base = when {
+            isSub -> KnowledgeRepository.subtractionIds
+            isMul -> KnowledgeRepository.multiplicationIds
+            else  -> KnowledgeRepository.additionIds
+        }
         return when (digitMode) {
-            1    -> if (operationType == "-") listOf(10, 11) else listOf(1, 2)
-            // Level 2: no 3-digit KCs (3S = 14 excluded)
-            2    -> if (operationType == "-") listOf(10, 11, 12, 13, 15) else (1..6).toList()
+            1    -> when {
+                isSub -> listOf(10, 11)
+                isMul -> listOf(18, 19)                      // T5, T10
+                else  -> listOf(1, 2)
+            }
+            // Level 2: no 3-digit KCs for +/- (3S = 14 excluded)
+            2    -> when {
+                isSub -> listOf(10, 11, 12, 13, 15)
+                isMul -> listOf(20, 21, 22, 23, 24)          // 2M1, 2M1C, 3M1, 3M1C, 3M1C2
+                else  -> (1..6).toList()
+            }
+            3    -> if (isMul) listOf(25, 26, 27, 28) else base   // 2M2, 2M2C, 3M2, 3M2C
             else -> base
         }
     }
@@ -133,7 +154,7 @@ class AdaptiveEngine {
     val currentZpdNames: List<String>
         get() {
             val filterIds = activeKCIds()
-            val zpd = KnowledgeRepository.getZPD({ isMastered(it) }, filterIds)
+            val zpd = zpdFor(filterIds)
             return zpd.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
@@ -150,7 +171,7 @@ class AdaptiveEngine {
     private fun initZPD() {
         kcAncestors.clear()
         val filterIds = activeKCIds()
-        val initZpd = KnowledgeRepository.getZPD({ isMastered(it) }, filterIds)
+        val initZpd = zpdFor(filterIds)
 
         Log.i(TAG, "── initZPD() ──")
         Log.i(TAG, "  filterIds = $filterIds")
@@ -199,11 +220,10 @@ class AdaptiveEngine {
     }
 
     private fun getNextAssessmentState(responseString: String): BoundaryState {
-        val isAddition = operationType == "+"
-        return if (isAddition) {
-            BoundaryDetector.getAdditionState(responseString)
-        } else {
-            BoundaryDetector.getSubtractionState(responseString)
+        return when (operationType) {
+            "-"  -> BoundaryDetector.getSubtractionState(responseString)
+            "×"  -> BoundaryDetector.getMultiplicationState(responseString)
+            else -> BoundaryDetector.getAdditionState(responseString)
         }
     }
 
@@ -225,6 +245,28 @@ class AdaptiveEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Question building (shared by all phases / operations)
+    // ─────────────────────────────────────────────────────────────────────────
+    private fun buildQuestionForCurrentKC(): Pair<String, List<Int>> {
+        val (num1, num2) = generateNumbersForKC(currentKC)
+        lastNum1 = num1; lastNum2 = num2
+        val op = KnowledgeRepository.getOperationType(currentKC)
+        correctAnswer = when (op) {
+            "-"  -> num1 - num2
+            "×"  -> num1 * num2
+            else -> num1 + num2
+        }
+
+        val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; else -> "+" }
+        val question = "$num1 $opSymbol $num2 = ?"
+        lastQuestionText = "$num1$op$num2"
+
+        val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
+        val options = (listOf(correctAnswer) + distractors).shuffled()
+        return Pair(question, options)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // generateQuestion
     // ─────────────────────────────────────────────────────────────────────────
     fun generateQuestion(): Pair<String, List<Int>> {
@@ -237,7 +279,7 @@ class AdaptiveEngine {
 
     private fun generateLearningQuestion(): Pair<String, List<Int>> {
         val filterIds = activeKCIds()
-        val zpd = KnowledgeRepository.getZPD({ isMastered(it) }, filterIds)
+        val zpd = zpdFor(filterIds)
 
         Log.d(TAG, "[generateLearningQuestion] ZPD = ${zpd.map { "$it(${BoundaryDetector.ID_TO_NODE[it] ?: it})" }}")
         Log.d(TAG, "  mastered = ${filterIds.filter { isMastered(it) }.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
@@ -258,19 +300,7 @@ class AdaptiveEngine {
         }
 
         practiceQuestionNo++
-        val (num1, num2) = generateNumbersForKC(currentKC)
-        lastNum1 = num1; lastNum2 = num2
-        val op = KnowledgeRepository.getOperationType(currentKC)
-        correctAnswer = if (op == "-") num1 - num2 else num1 + num2
-
-        val opSymbol = if (op == "-") "−" else "+"
-        val question = "$num1 $opSymbol $num2 = ?"
-        lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
-
-        val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
-        val options = (listOf(correctAnswer) + distractors).shuffled()
-
-        return Pair(question, options)
+        return buildQuestionForCurrentKC()
     }
 
     private fun generateAssessmentQuestion(): Pair<String, List<Int>> {
@@ -280,19 +310,7 @@ class AdaptiveEngine {
             Log.i(TAG, "[ASSESSMENT] Confirmation question for KC $confirmKC (${BoundaryDetector.ID_TO_NODE[confirmKC]}) | path='$assessmentResponseString'")
 
             detectionQuestionNo++
-            val (num1, num2) = generateNumbersForKC(currentKC)
-            lastNum1 = num1; lastNum2 = num2
-            val op = KnowledgeRepository.getOperationType(currentKC)
-            correctAnswer = if (op == "-") num1 - num2 else num1 + num2
-
-            val opSymbol = if (op == "-") "−" else "+"
-            val question = "$num1 $opSymbol $num2 = ?"
-            lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
-
-            val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
-            val options = (listOf(correctAnswer) + distractors).shuffled()
-
-            return Pair(question, options)
+            return buildQuestionForCurrentKC()
         }
 
         return when (val state = getNextAssessmentState(assessmentResponseString)) {
@@ -302,19 +320,7 @@ class AdaptiveEngine {
                 Log.i(TAG, "[ASSESSMENT] Asking KC $kcId (${BoundaryDetector.ID_TO_NODE[kcId]}) | path='$assessmentResponseString'")
 
                 detectionQuestionNo++
-                val (num1, num2) = generateNumbersForKC(currentKC)
-                lastNum1 = num1; lastNum2 = num2
-                val op = KnowledgeRepository.getOperationType(currentKC)
-                correctAnswer = if (op == "-") num1 - num2 else num1 + num2
-
-                val opSymbol = if (op == "-") "−" else "+"
-                val question = "$num1 $opSymbol $num2 = ?"
-                lastQuestionText = "$num1${if (op == "-") "-" else "+"}$num2"
-
-                val distractors = DistractorGenerator.generate(currentKC, num1, num2, correctAnswer, needed = 3)
-                val options = (listOf(correctAnswer) + distractors).shuffled()
-
-                Pair(question, options)
+                buildQuestionForCurrentKC()
             }
             is BoundaryState.Terminal -> {
                 if (!terminalHandled) {
@@ -457,7 +463,7 @@ class AdaptiveEngine {
             lastZpdUpdate = unlockedKCs.map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }
         }
 
-        val newZpd = KnowledgeRepository.getZPD({ isMastered(it) }, filterIds)
+        val newZpd = zpdFor(filterIds)
         for (newKc in newZpd) addArmIfNeeded(newKc)
 
         Log.i(TAG, "  After mastery of ${BoundaryDetector.ID_TO_NODE[kcId] ?: kcId}:")
@@ -531,19 +537,19 @@ class AdaptiveEngine {
     private val MIN_GAP_3D = 100   // 3-digit − 3-digit (KC 14, 16, 17)
 
     /**
-     * Wrapper: for tiny-problem-space KCs (1, 2, 10) avoids repeating any
-     * of the last [recentWindow] questions. Addition treats a+b and b+a as same.
+     * Wrapper: for tiny-problem-space KCs (1, 2, 10, 18, 19) avoids repeating any
+     * of the last [recentWindow] questions. Addition/multiplication treat a∘b and b∘a as same.
      */
     private fun generateNumbersForKC(kcId: Int): Pair<Int, Int> {
         if (kcId !in noRepeatKCs) return generateRawNumbersForKC(kcId)
 
         val recent = recentPairs.getOrPut(kcId) { ArrayDeque() }
-        val isAdd = KnowledgeRepository.getOperationType(kcId) == "+"
+        val commutative = KnowledgeRepository.getOperationType(kcId) != "-"
 
         var pair = generateRawNumbersForKC(kcId)
         var attempts = 0
         while (attempts < 100 &&
-            recent.any { it == pair || (isAdd && it == Pair(pair.second, pair.first)) }
+            recent.any { it == pair || (commutative && it == Pair(pair.second, pair.first)) }
         ) {
             pair = generateRawNumbersForKC(kcId)
             attempts++
@@ -561,6 +567,10 @@ class AdaptiveEngine {
             val hi = 10.0.pow(n).toInt() - 1
             return (lo..hi).random()
         }
+
+        // n-digit number whose digits are each random in 1..maxD (never 0)
+        fun randDigits(n: Int, maxD: Int): Int =
+            (1..n).fold(0) { acc, _ -> acc * 10 + (1..maxD).random() }
 
         fun hasCarry(a: Int, b: Int): Boolean {
             var x = a; var y = b; var carry = 0
@@ -601,6 +611,33 @@ class AdaptiveEngine {
                 x /= 10; y /= 10
             }
             return c
+        }
+
+        // Number of carries when multiplying multi-digit a by single digit b
+        fun mulCarryCount(a: Int, b: Int): Int {
+            var x = a; var carry = 0; var c = 0
+            while (x > 0) {
+                val p = (x % 10) * b + carry
+                if (p >= 10) c++
+                carry = p / 10
+                x /= 10
+            }
+            return c
+        }
+
+        // True if every column of the long-multiplication convolution is ≤ 9
+        fun mulColsNoCarry(a: Int, b: Int): Boolean {
+            val da = a.toString().reversed().map { it.digitToInt() }
+            val db = b.toString().reversed().map { it.digitToInt() }
+            for (k in 0..(da.size + db.size - 2)) {
+                var sum = 0
+                for (i in da.indices) {
+                    val j = k - i
+                    if (j in db.indices) sum += da[i] * db[j]
+                }
+                if (sum > 9) return false
+            }
+            return true
         }
 
         fun safePair(gen: () -> Pair<Int, Int>, predicate: (Int, Int) -> Boolean): Pair<Int, Int> {
@@ -647,6 +684,53 @@ class AdaptiveEngine {
             }
             17 -> safePair({ threeDigitMinuend() }) { a, b ->
                 borrowCount(a, b) >= 2 && a > b && notTooClose3(a, b)
+            }
+
+            // ── MULTIPLICATION ───────────────────────────────────────────────
+            // T5: one factor 2..5, other 2..9 (no ×1)
+            18 -> {
+                val a = (2..5).random(); val b = (2..9).random()
+                if ((0..1).random() == 0) Pair(a, b) else Pair(b, a)
+            }
+            // T10: both factors 6..9 (excludes 5×6 etc. which belong to T5)
+            19 -> Pair((6..9).random(), (6..9).random())
+            // 2M1: 2-digit × (2..4), every digit product < 10, no zero digits
+            20 -> {
+                val b = (2..4).random()
+                Pair(randDigits(2, 9 / b), b)
+            }
+            // 2M1C: 2-digit × (2..9) with carry, ones digit ≠ 0
+            21 -> safePair({ Pair(nDigit(2), (2..9).random()) }) { a, b ->
+                a % 10 != 0 && mulCarryCount(a, b) >= 1
+            }
+            // 3M1: 3-digit × (2..3), no carry, no zero digits
+            22 -> {
+                val b = (2..3).random()
+                Pair(randDigits(3, 9 / b), b)
+            }
+            // 3M1C: exactly one carry
+            23 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b ->
+                a % 10 != 0 && mulCarryCount(a, b) == 1
+            }
+            // 3M1C2: two or more carries
+            24 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b ->
+                a % 10 != 0 && mulCarryCount(a, b) >= 2
+            }
+            // 2M2: no carry in any column
+            25 -> safePair({ Pair(randDigits(2, 3), randDigits(2, 3)) }) { a, b ->
+                mulColsNoCarry(a, b)
+            }
+            // 2M2C: carry, neither operand a multiple of 10
+            26 -> safePair({ Pair(nDigit(2), nDigit(2)) }) { a, b ->
+                a % 10 != 0 && b % 10 != 0 && !mulColsNoCarry(a, b)
+            }
+            // 3M2: no carry; multiplier has no zero digit (so never a multiple of 10)
+            27 -> safePair({ Pair(randDigits(3, 3), randDigits(2, 3)) }) { a, b ->
+                mulColsNoCarry(a, b)
+            }
+            // 3M2C: carry, neither operand a multiple of 10
+            28 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b ->
+                a % 10 != 0 && b % 10 != 0 && !mulColsNoCarry(a, b)
             }
             else -> Pair(1, 1)
         }

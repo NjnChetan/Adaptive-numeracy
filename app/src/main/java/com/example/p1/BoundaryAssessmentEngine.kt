@@ -98,149 +98,169 @@ object BoundaryDetector {
         }
     }
 
+    /**
+     * Multiplication (IDs 18–28). Ported from knowledge_boundary_multiplication.py.
+     *
+     * T5=18 T10=19 2M1=20 2M1C=21 3M1=22 3M1C=23 3M1C2=24
+     * 2M2=25 2M2C=26 3M2=27 3M2C=28
+     *
+     * Edges: T5→T10, T5→2M1, T10→2M1C, 2M1→2M1C, 2M1→3M1, 2M1C→3M1C,
+     *        3M1→3M1C, 3M1C→3M1C2, 3M1C2→2M2, 2M2→2M2C, 2M2→3M2,
+     *        2M2C→3M2C, 3M2→3M2C
+     */
     fun getMultiplicationState(response: String): BoundaryState {
         return when (response) {
-            ""      -> BoundaryState.Ask(23)
-            "1"     -> BoundaryState.Ask(25)
-            "11"    -> BoundaryState.Ask(27)
-            "111"   -> BoundaryState.Ask(26)
-            "1111"  -> BoundaryState.Ask(28)
-            "11111" -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24,25,26,27,28), emptySet(), setOf(28))
-            "11110" -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24,25,26,27), setOf(28), setOf(26,27))
-            "1110"  -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24,25,27), setOf(26,28), setOf(25,27))
-            "110"   -> BoundaryState.Ask(26)
-            "1101"  -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24,25,26), setOf(27,28), setOf(25,26))
-            "1100"  -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24,25), setOf(26,27,28), setOf(25))
-            "10"    -> BoundaryState.Ask(24)
-            "101"   -> BoundaryState.Terminal(setOf(18,19,20,21,22,23,24), setOf(25,26,27,28), setOf(24))
-            "100"   -> BoundaryState.Terminal(setOf(18,19,20,21,22,23), setOf(24,25,26,27,28), setOf(23))
-            "0"     -> BoundaryState.Ask(21)
-            "01"    -> BoundaryState.Ask(22)
-            "011"   -> BoundaryState.Terminal(setOf(18,19,20,21,22), setOf(23,24,25,26,27,28), setOf(21,22))
-            "010"   -> BoundaryState.Terminal(setOf(18,19,20,21), setOf(22,23,24,25,26,27,28), setOf(20,21))
-            "00"    -> BoundaryState.Ask(20)
-            "001"   -> BoundaryState.Ask(22)
-            "0011"  -> BoundaryState.Ask(19)
-            "00111" -> BoundaryState.Terminal(setOf(18,19,20,22), setOf(21,23,24,25,26,27,28), setOf(19,20,22))
-            "00110" -> BoundaryState.Terminal(setOf(18,20,22), setOf(19,21,23,24,25,26,27,28), setOf(18,20,22))
-            "0010"  -> BoundaryState.Ask(19)
-            "00101" -> BoundaryState.Terminal(setOf(18,19,20), setOf(21,22,23,24,25,26,27,28), setOf(19,20))
-            "00100" -> BoundaryState.Terminal(setOf(18,20), setOf(19,21,22,23,24,25,26,27,28), setOf(18,20))
-            "000"   -> BoundaryState.Ask(19)
-            "0001"  -> BoundaryState.Terminal(setOf(18,19), setOf(20,21,22,23,24,25,26,27,28), setOf(18,19))
-            "0000"  -> BoundaryState.Ask(18)
-            "00001" -> BoundaryState.Terminal(setOf(18), setOf(19,20,21,22,23,24,25,26,27,28), setOf(18))
-            "00000" -> BoundaryState.Terminal(emptySet(), setOf(18,19,20,21,22,23,24,25,26,27,28), setOf(18))
+            // ── Root ──────────────────────────────────────────────────────
+            ""      -> BoundaryState.Ask(23)   // 3M1C
+
+            // ── 3M1C correct ──────────────────────────────────────────────
+            "1"     -> BoundaryState.Ask(26)   // 2M2C
+
+            // 3M1C✓ 2M2C✓
+            "11"    -> BoundaryState.Ask(27)   // 3M2
+            "111"   -> BoundaryState.Ask(28)   // 3M2C
+            "1111"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24,25,26,27,28), emptySet(), emptySet())
+            "1110"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24,25,26,27), setOf(28), setOf(26,27))
+            "110"   -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24,25,26), setOf(27,28), setOf(25,26))
+
+            // 3M1C✓ 2M2C✗
+            "10"    -> BoundaryState.Ask(25)   // 2M2
+            "101"   -> BoundaryState.Ask(27)   // 3M2
+            "1011"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24,25,27), setOf(26,28), setOf(25,27))
+            "1010"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24,25), setOf(26,27,28), setOf(25))
+            "100"   -> BoundaryState.Ask(24)   // 3M1C2
+            "1001"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23,24), setOf(25,26,27,28), setOf(24))
+            "1000"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22,23), setOf(24,25,26,27,28), setOf(23))
+
+            // ── 3M1C wrong ────────────────────────────────────────────────
+            "0"     -> BoundaryState.Ask(19)   // T10
+
+            // 3M1C✗ T10✓
+            "01"    -> BoundaryState.Ask(21)   // 2M1C
+            "011"   -> BoundaryState.Ask(22)   // 3M1
+            "0111"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21,22), setOf(23,24,25,26,27,28), setOf(21,22))
+            "0110"  -> BoundaryState.Terminal(
+                setOf(18,19,20,21), setOf(22,23,24,25,26,27,28), setOf(20,21))
+            "010"   -> BoundaryState.Ask(20)   // 2M1
+            "0101"  -> BoundaryState.Ask(22)   // 3M1
+            "01011" -> BoundaryState.Terminal(
+                setOf(18,19,20,22), setOf(21,23,24,25,26,27,28), setOf(19,20,22))
+            "01010" -> BoundaryState.Terminal(
+                setOf(18,19,20), setOf(21,22,23,24,25,26,27,28), setOf(19,20))
+            "0100"  -> BoundaryState.Terminal(
+                setOf(18,19), setOf(20,21,22,23,24,25,26,27,28), setOf(18,19))
+
+            // 3M1C✗ T10✗
+            "00"    -> BoundaryState.Ask(20)   // 2M1
+            "001"   -> BoundaryState.Ask(22)   // 3M1
+            "0011"  -> BoundaryState.Terminal(
+                setOf(18,20,22), setOf(19,21,23,24,25,26,27,28), setOf(18,20,22))
+            "0010"  -> BoundaryState.Terminal(
+                setOf(18,20), setOf(19,21,22,23,24,25,26,27,28), setOf(18,20))
+            "000"   -> BoundaryState.Ask(18)   // T5
+            "0001"  -> BoundaryState.Terminal(
+                setOf(18), setOf(19,20,21,22,23,24,25,26,27,28), setOf(18))
+            "0000"  -> BoundaryState.Terminal(
+                emptySet(), setOf(18,19,20,21,22,23,24,25,26,27,28), setOf(18))
+
             else -> throw IllegalArgumentException("Unknown response string: $response")
         }
     }
 
     /**
-     * Get the next state for Division (Graph, IDs 29–37)
+     * Division (IDs 29–37). Ported from knowledge_boundary_division.py.
      *
-     * Graph:
-     *   2D1(29) -> 2D1R(31), 3D1(30)
-     *   2D1R, 3D1 -> 3D1R(32)
-     *   3D1 -> 3D2(35)
-     *   3D1R -> 3D1Z(33), 4D1R(34)
-     *   3D2, 3D1R -> 3D2R(36)
-     *   3D2R, 4D1R -> 4D2R(37)
+     * 2D1=29 3D1=30 2D1R=31 3D1R=32 3D1Z=33 4D1R=34 3D2=35 3D2R=36 4D2R=37
      *
-     * Ask order: 32 (3D1R) first — root bisection — then branch into the
-     * 3D1Z / 4D1R / 3D2 / 3D2R / 4D2R frontier, or fall back to 29/30/31
-     * if 3D1R fails.
+     * Edges: 2D1→2D1R, 2D1→3D1, 2D1R→3D1R, 3D1→3D1R, 3D1→3D2, 3D2→3D2R,
+     *        3D1R→3D1Z, 3D1R→4D1R, 3D1R→3D2R, 4D1R→4D2R, 3D2R→4D2R
      */
     fun getDivisionState(response: String): BoundaryState {
         return when (response) {
-            ""      -> BoundaryState.Ask(32) // 3D1R
-            "1"     -> BoundaryState.Ask(33) // 3D1Z
-            "11"    -> BoundaryState.Ask(34) // 4D1R
-            "111"   -> BoundaryState.Ask(35) // 3D2
-            "1111"  -> BoundaryState.Ask(36) // 3D2R
-            "11111" -> BoundaryState.Ask(37) // 4D2R
-            "111111" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,34,35,36,37),
-                unsolvable = emptySet(),
-                boundary   = setOf(37)
-            )
-            "111110" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,34,35,36),
-                unsolvable = setOf(37),
-                boundary   = setOf(36,34)
-            )
+            // ── Root ──────────────────────────────────────────────────────
+            ""      -> BoundaryState.Ask(32)   // 3D1R
+
+            // ── 3D1R correct ──────────────────────────────────────────────
+            "1"     -> BoundaryState.Ask(36)   // 3D2R
+
+            // 3D1R✓ 3D2R✓
+            "11"    -> BoundaryState.Ask(33)   // 3D1Z
+            "111"   -> BoundaryState.Ask(34)   // 4D1R
+            "1111"  -> BoundaryState.Ask(37)   // 4D2R
+            "11111" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,33,34,35,36,37), emptySet(), emptySet())
             "11110" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,34,35),
-                unsolvable = setOf(36,37),
-                boundary   = setOf(35,34)
-            )
+                setOf(29,30,31,32,33,34,35,36), setOf(37), setOf(36,34))
             "1110"  -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,34),
-                unsolvable = setOf(35,36,37),
-                boundary   = setOf(34,33)
-            )
-            "110"   -> BoundaryState.Ask(35) // 3D2
-            "1101"  -> BoundaryState.Ask(36) // 3D2R
+                setOf(29,30,31,32,33,35,36), setOf(34,37), setOf(32,36))
+            "110"   -> BoundaryState.Ask(34)   // 4D1R
+            "1101"  -> BoundaryState.Ask(37)   // 4D2R
             "11011" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,35,36),
-                unsolvable = setOf(34,37),
-                boundary   = setOf(33,36)
-            )
+                setOf(29,30,31,32,34,35,36,37), setOf(33), setOf(32))
             "11010" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33,35),
-                unsolvable = setOf(34,36,37),
-                boundary   = setOf(33,35)
-            )
+                setOf(29,30,31,32,34,35,36), setOf(33,37), setOf(32,36,34))
             "1100"  -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,33),
-                unsolvable = setOf(34,35,36,37),
-                boundary   = setOf(33)
-            )
-            "10"    -> BoundaryState.Ask(34) // 4D1R
-            "101"   -> BoundaryState.Ask(35) // 3D2
-            "1011"  -> BoundaryState.Ask(36) // 3D2R
+                setOf(29,30,31,32,35,36), setOf(33,34,37), setOf(32,36))
+
+            // 3D1R✓ 3D2R✗
+            "10"    -> BoundaryState.Ask(35)   // 3D2
+            "101"   -> BoundaryState.Ask(33)   // 3D1Z
+            "1011"  -> BoundaryState.Ask(34)   // 4D1R
             "10111" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,34,35,36),
-                unsolvable = setOf(33,37),
-                boundary   = setOf(34,36)
-            )
+                setOf(29,30,31,32,33,34,35), setOf(36,37), setOf(35,32,34))
             "10110" -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,34,35),
-                unsolvable = setOf(33,36,37),
-                boundary   = setOf(34,35)
-            )
-            "1010"  -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32,34),
-                unsolvable = setOf(33,35,36,37),
-                boundary   = setOf(34)
-            )
-            "100"   -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31,32),
-                unsolvable = setOf(33,34,35,36,37),
-                boundary   = setOf(32)
-            )
-            "0"     -> BoundaryState.Ask(31) // 2D1R
-            "01"    -> BoundaryState.Ask(30) // 3D1
-            "011"   -> BoundaryState.Terminal(
-                solvable   = setOf(29,30,31),
-                unsolvable = setOf(32,33,34,35,36,37),
-                boundary   = setOf(30,31)
-            )
-            "010"   -> BoundaryState.Terminal(
-                solvable   = setOf(29,31),
-                unsolvable = setOf(30,32,33,34,35,36,37),
-                boundary   = setOf(31)
-            )
-            "00"    -> BoundaryState.Ask(29) // 2D1
-            "001"   -> BoundaryState.Terminal(
-                solvable   = setOf(29),
-                unsolvable = setOf(30,31,32,33,34,35,36,37),
-                boundary   = setOf(29)
-            )
+                setOf(29,30,31,32,33,35), setOf(34,36,37), setOf(35,32))
+            "1010"  -> BoundaryState.Ask(34)   // 4D1R
+            "10101" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,34,35), setOf(33,36,37), setOf(35,32,34))
+            "10100" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,35), setOf(33,34,36,37), setOf(35,32))
+            "100"   -> BoundaryState.Ask(33)   // 3D1Z
+            "1001"  -> BoundaryState.Ask(34)   // 4D1R
+            "10011" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,33,34), setOf(35,36,37), setOf(30,32,34))
+            "10010" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,33), setOf(34,35,36,37), setOf(30,32))
+            "1000"  -> BoundaryState.Ask(34)   // 4D1R
+            "10001" -> BoundaryState.Terminal(
+                setOf(29,30,31,32,34), setOf(33,35,36,37), setOf(30,32,34))
+            "10000" -> BoundaryState.Terminal(
+                setOf(29,30,31,32), setOf(33,34,35,36,37), setOf(30,32))
+
+            // ── 3D1R wrong ────────────────────────────────────────────────
+            "0"     -> BoundaryState.Ask(30)   // 3D1
+
+            // 3D1R✗ 3D1✓
+            "01"    -> BoundaryState.Ask(31)   // 2D1R
+            "011"   -> BoundaryState.Ask(35)   // 3D2
+            "0111"  -> BoundaryState.Terminal(
+                setOf(29,30,31,35), setOf(32,33,34,36,37), setOf(31,30,35))
+            "0110"  -> BoundaryState.Terminal(
+                setOf(29,30,31), setOf(32,33,34,35,36,37), setOf(31,30))
+            "010"   -> BoundaryState.Ask(35)   // 3D2
+            "0101"  -> BoundaryState.Terminal(
+                setOf(29,30,35), setOf(31,32,33,34,36,37), setOf(29,30,35))
+            "0100"  -> BoundaryState.Terminal(
+                setOf(29,30), setOf(31,32,33,34,35,36,37), setOf(29,30))
+
+            // 3D1R✗ 3D1✗
+            "00"    -> BoundaryState.Ask(29)   // 2D1
+            "001"   -> BoundaryState.Ask(31)   // 2D1R
+            "0011"  -> BoundaryState.Terminal(
+                setOf(29,31), setOf(30,32,33,34,35,36,37), setOf(29,31))
+            "0010"  -> BoundaryState.Terminal(
+                setOf(29), setOf(30,31,32,33,34,35,36,37), setOf(29))
             "000"   -> BoundaryState.Terminal(
-                solvable   = emptySet(),
-                unsolvable = setOf(29,30,31,32,33,34,35,36,37),
-                boundary   = setOf(29)
-            )
+                emptySet(), setOf(29,30,31,32,33,34,35,36,37), setOf(29))
+
             else -> throw IllegalArgumentException("Unknown response string: $response")
         }
     }
