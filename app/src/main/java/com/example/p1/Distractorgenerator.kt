@@ -10,6 +10,8 @@ object DistractorGenerator {
 
         val raw = if (kcId in 18..28) {
             multiplicationDistractors(kcId, num1, num2, correctAnswer, needed)
+        } else if (kcId in 29..37) {
+            divisionDistractors(num1, num2, correctAnswer)
         } else when (kcId) {
             // ── ADDITION distractors ─────────────────────────────────────────
             1     -> offByOneGeneric(correctAnswer, listOf(-2, -1, 1, 2))
@@ -97,6 +99,31 @@ object DistractorGenerator {
         for (off in listOf(10, -10, 20, -20, 100, -100, 200, -200)) cands.add(correct + off)
 
         return pickMul(cands, correct, needed)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DIVISION distractors (KC 29–37). Answer = quotient.
+    // Same digit count as the quotient where possible; built from real errors:
+    // rounding up on a remainder, off-by-one digit in any place, dropped zero
+    // in the quotient, quotient digit in the wrong place.
+    // ─────────────────────────────────────────────────────────────────────────
+    private fun divisionDistractors(a: Int, b: Int, q: Int): List<Int> {
+        val cands = mutableListOf<Int>()
+        if (a % b != 0) cands.add(q + 1)                       // rounded up
+        cands.add(q + 1); cands.add(q - 1)
+        cands.add(q + 2); cands.add(q - 2)
+        cands.add(q + 10); cands.add(q - 10)                   // tens digit slip
+        cands.add(q + 100); cands.add(q - 100)                 // hundreds digit slip
+        val noZero = q.toString().filter { it != '0' }
+        if (noZero.isNotEmpty() && noZero.toInt() != q) cands.add(noZero.toInt())   // dropped zero
+        if (q.toString().contains('0')) {                      // zero moved / swapped for 1
+            cands.add(q.toString().replace('0', '1').toInt())
+        }
+        cands.add(q * 10); if (q >= 10) cands.add(q / 10)
+        val len = q.toString().length
+        val good = cands.filter { it >= 0 && it != q && it.toString().length == len }.distinct().shuffled()
+        val rest = cands.filter { it >= 0 && it != q && it !in good }.distinct()
+        return good + rest
     }
 
     /** Digit-by-digit product with every carry dropped: each column = (digit × d) mod 10. */
@@ -305,6 +332,12 @@ object DistractorGenerator {
         val op = KnowledgeRepository.getOperationType(kcId)
 
         if (op == "×") return getMisconceptionForOp("×", num1, num2, correctAnswer, selectedAnswer)
+        if (op == "÷") {
+            if (num2 != 0 && num1 % num2 != 0 && selectedAnswer == correctAnswer + 1) return "Rounded-up"
+            if (correctAnswer.toString().contains('0') &&
+                selectedAnswer == correctAnswer.toString().filter { it != '0' }.toIntOrNull()) return "Dropped-zero"
+            return getMisconceptionForOp("÷", num1, num2, correctAnswer, selectedAnswer)
+        }
 
         if (op == "-" && selectedAnswer == num1 + num2) return "Add-instead-of-subtract"
         if (op == "+" && selectedAnswer == num1 - num2) return "Subtract-instead-of-add"

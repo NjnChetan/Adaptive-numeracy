@@ -103,24 +103,32 @@ class AdaptiveEngine {
     private fun activeKCIds(): List<Int> {
         val isSub = operationType == "-"
         val isMul = operationType == "×"
+        val isDiv = operationType == "÷"
         val base = when {
             isSub -> KnowledgeRepository.subtractionIds
             isMul -> KnowledgeRepository.multiplicationIds
+            isDiv -> KnowledgeRepository.divisionIds
             else  -> KnowledgeRepository.additionIds
         }
         return when (digitMode) {
             1    -> when {
                 isSub -> listOf(10, 11)
                 isMul -> listOf(18, 19)                      // T5, T10
+                isDiv -> listOf(29, 30, 31)                  // 2D1, 3D1, 2D1R
                 else  -> listOf(1, 2)
             }
             // Level 2: no 3-digit KCs for +/- (3S = 14 excluded)
             2    -> when {
                 isSub -> listOf(10, 11, 12, 13, 15)
                 isMul -> listOf(20, 21, 22, 23, 24)          // 2M1, 2M1C, 3M1, 3M1C, 3M1C2
+                isDiv -> listOf(32, 33, 34)                  // 3D1R, 3D1Z, 4D1R
                 else  -> (1..6).toList()
             }
-            3    -> if (isMul) listOf(25, 26, 27, 28) else base   // 2M2, 2M2C, 3M2, 3M2C
+            3    -> when {
+                isMul -> listOf(25, 26, 27, 28)              // 2M2, 2M2C, 3M2, 3M2C
+                isDiv -> listOf(35, 36, 37)                  // 3D2, 3D2R, 4D2R
+                else  -> base
+            }
             else -> base
         }
     }
@@ -223,6 +231,7 @@ class AdaptiveEngine {
         return when (operationType) {
             "-"  -> BoundaryDetector.getSubtractionState(responseString)
             "×"  -> BoundaryDetector.getMultiplicationState(responseString)
+            "÷"  -> BoundaryDetector.getDivisionState(responseString)
             else -> BoundaryDetector.getAdditionState(responseString)
         }
     }
@@ -254,10 +263,11 @@ class AdaptiveEngine {
         correctAnswer = when (op) {
             "-"  -> num1 - num2
             "×"  -> num1 * num2
+            "÷"  -> num1 / num2          // quotient (remainder KCs: floor quotient)
             else -> num1 + num2
         }
 
-        val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; else -> "+" }
+        val opSymbol = when (op) { "-" -> "−"; "×" -> "×"; "÷" -> "÷"; else -> "+" }
         val question = "$num1 $opSymbol $num2 = ?"
         lastQuestionText = "$num1$op$num2"
 
@@ -731,6 +741,34 @@ class AdaptiveEngine {
             // 3M2C: carry, neither operand a multiple of 10
             28 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b ->
                 a % 10 != 0 && b % 10 != 0 && !mulColsNoCarry(a, b)
+            }
+
+            // ── DIVISION (answer = quotient) ─────────────────────────────────
+            // 2D1: 2-digit ÷ 1-digit, exact
+            29 -> safePair({ Pair(nDigit(2), (2..9).random()) }) { a, b -> a % b == 0 && a / b >= 2 }
+            // 3D1: 3-digit ÷ 1-digit, exact
+            30 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b -> a % b == 0 }
+            // 2D1R: 2-digit ÷ 1-digit, remainder
+            31 -> safePair({ Pair(nDigit(2), (2..9).random()) }) { a, b -> a % b != 0 && a / b >= 2 }
+            // 3D1R: 3-digit ÷ 1-digit, remainder
+            32 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b -> a % b != 0 }
+            // 3D1Z: 3-digit ÷ 1-digit, zero digit in quotient
+            33 -> safePair({ Pair(nDigit(3), (2..9).random()) }) { a, b ->
+                a / b >= 10 && a / b < 1000 && a / b % 10 == 0 || (a / b >= 100 && (a / b) / 10 % 10 == 0)
+            }
+            // 4D1R: 4-digit ÷ 1-digit, remainder
+            34 -> safePair({ Pair(nDigit(4), (2..9).random()) }) { a, b -> a % b != 0 }
+            // 3D2: 3-digit ÷ 2-digit, exact (divisor not a multiple of 10)
+            35 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b ->
+                b % 10 != 0 && a % b == 0 && a / b >= 2
+            }
+            // 3D2R: 3-digit ÷ 2-digit, remainder
+            36 -> safePair({ Pair(nDigit(3), nDigit(2)) }) { a, b ->
+                b % 10 != 0 && a % b != 0 && a / b >= 2
+            }
+            // 4D2R: 4-digit ÷ 2-digit, remainder
+            37 -> safePair({ Pair(nDigit(4), nDigit(2)) }) { a, b ->
+                b % 10 != 0 && a % b != 0 && a / b >= 10
             }
             else -> Pair(1, 1)
         }
