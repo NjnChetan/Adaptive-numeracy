@@ -450,6 +450,8 @@ class MainActivity : AppCompatActivity() {
                         cardBorder?.background = normalBorder
                         questionText.setTextColor(Color.parseColor("#2B3A8C"))
                         questionText.tag = null
+                        conceptsContainer?.removeAllViews()
+                        conceptsContainer?.visibility = View.GONE
                         questionText.text = loc("\n\nPractice Starts")
                     }
                     kotlinx.coroutines.delay(5000)
@@ -488,14 +490,7 @@ class MainActivity : AppCompatActivity() {
 
                 val currentConcept = engine.currentKCName
                 val isAssessmentPhase = engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT
-                val masteredSet = engine.masteredConceptNames
-                val zpdNames = engine.currentZpdNames
 
-                val visibleConcepts = if (isAssessmentPhase) {
-                    listOf(currentConcept)
-                } else {
-                    masteredSet.toList().sorted() + zpdNames.filter { it !in masteredSet }
-                }
 
                 withContext(Dispatchers.Main) {
                     cardBorder?.background = normalBorder
@@ -510,6 +505,7 @@ class MainActivity : AppCompatActivity() {
                     scoreText?.text = loc("Q: ${total + 1}")
 
                     conceptsContainer?.removeAllViews()
+                    conceptsContainer?.visibility = View.VISIBLE
 
                     if (isAssessmentPhase) {
                         val badgeContainer = android.widget.LinearLayout(this@MainActivity).apply {
@@ -563,50 +559,26 @@ class MainActivity : AppCompatActivity() {
 
                         conceptsContainer?.addView(badgeContainer)
                     } else {
-                        for (name in visibleConcepts) {
-                            val isCurrent = (name == currentConcept)
-                            val isMastered = (name in masteredSet)
-                            val tv = TextView(this@MainActivity).apply {
-                                text = if (isMastered) loc("✓$name") else loc(name)
-                                textSize = 10f
-                                setTypeface(null, Typeface.BOLD)
-                                setPadding(8, 3, 8, 3)
-                                when {
-                                    isCurrent -> {
-                                        setTextColor(Color.WHITE)
-                                        background = GradientDrawable().apply {
-                                            shape = GradientDrawable.RECTANGLE
-                                            cornerRadius = 8f
-                                            setColor(Color.parseColor("#2B3A8C"))
-                                        }
-                                    }
-                                    isMastered -> {
-                                        setTextColor(Color.parseColor("#2E7D32"))
-                                        background = GradientDrawable().apply {
-                                            shape = GradientDrawable.RECTANGLE
-                                            cornerRadius = 8f
-                                            setColor(Color.parseColor("#E8F5E9"))
-                                        }
-                                    }
-                                    else -> {
-                                        setTextColor(Color.parseColor("#B0B8D0"))
-                                        background = GradientDrawable().apply {
-                                            shape = GradientDrawable.RECTANGLE
-                                            cornerRadius = 8f
-                                            setStroke(1, Color.parseColor("#D8DCE8"))
-                                            setColor(Color.TRANSPARENT)
-                                        }
-                                    }
-                                }
-                                val lp = android.widget.LinearLayout.LayoutParams(
-                                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                                )
-                                lp.setMargins(2, 0, 2, 0)
-                                layoutParams = lp
+                        // Practice phase: render ONLY the current concept chip
+                        val tv = TextView(this@MainActivity).apply {
+                            text = loc(currentConcept)
+                            textSize = 10f
+                            setTypeface(null, Typeface.BOLD)
+                            setPadding(8, 3, 8, 3)
+                            setTextColor(Color.WHITE)
+                            background = GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = 8f
+                                setColor(Color.parseColor("#2B3A8C"))
                             }
-                            conceptsContainer?.addView(tv)
+                            val lp = android.widget.LinearLayout.LayoutParams(
+                                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                            lp.setMargins(2, 0, 2, 0)
+                            layoutParams = lp
                         }
+                        conceptsContainer?.addView(tv)
                     }
 
                     answerButtons.forEachIndexed { i, btn ->
