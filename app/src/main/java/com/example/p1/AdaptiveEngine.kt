@@ -77,6 +77,12 @@ class AdaptiveEngine {
     private val recentWindow  = 5
     private val recentPairs   = mutableMapOf<Int, ArrayDeque<Pair<Int, Int>>>()
 
+    // ── Remedial KCs (Level 3 × and ÷ only) ──────────────────────────────────
+    // The × / ÷ boundary trees test the whole graph (e.g. 3M1C, T10), but Level 3
+    // only practises the top KCs. Lower-level KCs the assessment found unsolvable
+    // are added here so they are practised before the Level-3 KCs unlock.
+    private val remedialKCs = mutableSetOf<Int>()
+
     fun startSession(op: String, mode: Int) {
         Log.i(TAG, "--- STARTING NEW SESSION ---")
         operationType = op
@@ -85,6 +91,7 @@ class AdaptiveEngine {
         bandit.clearAll()
         cusumDetectors.clear()
         recentPairs.clear()
+        remedialKCs.clear()
         ts = 0
         detectionQuestionNo = 0
         practiceQuestionNo = 0
@@ -125,8 +132,10 @@ class AdaptiveEngine {
                 else  -> (1..6).toList()
             }
             3    -> when {
-                isMul -> listOf(25, 26, 27, 28)              // 2M2, 2M2C, 3M2, 3M2C
-                isDiv -> listOf(35, 36, 37)                  // 3D2, 3D2R, 4D2R
+                // 2M2, 2M2C, 3M2, 3M2C  (+ remedial KCs found by the assessment)
+                isMul -> (remedialKCs + listOf(25, 26, 27, 28)).sorted()
+                // 3D2, 3D2R, 4D2R       (+ remedial KCs found by the assessment)
+                isDiv -> (remedialKCs + listOf(35, 36, 37)).sorted()
                 else  -> base
             }
             else -> base
@@ -399,6 +408,15 @@ class AdaptiveEngine {
         Log.i(TAG, "  Boundary (Current Level): ${terminal.boundary}")
 
         newlyFoundBoundary = terminal.boundary.mapNotNull { BoundaryDetector.ID_TO_NODE[it] }.toSet()
+
+        // Unsolvable KCs below the level's own set become remedial practice
+        // (only matters for Level 3 × / ÷; for + / − the level set is the whole graph).
+        val levelIds = activeKCIds()
+        remedialKCs.clear()
+        remedialKCs.addAll(terminal.unsolvable.filter { it !in levelIds })
+        if (remedialKCs.isNotEmpty()) {
+            Log.i(TAG, "  Remedial KCs added: ${remedialKCs.sorted().map { BoundaryDetector.ID_TO_NODE[it] ?: "$it" }}")
+        }
 
         val solvableIds = terminal.solvable
         val filterIds   = activeKCIds()

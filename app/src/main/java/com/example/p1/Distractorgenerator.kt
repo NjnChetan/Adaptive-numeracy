@@ -30,10 +30,12 @@ object DistractorGenerator {
             11    -> subWrongPlaceValue(num1, num2, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1)) + listOf(num1 + num2)
             12    -> borrowConfusion(num1, num2, correctAnswer) + offByOneGeneric(correctAnswer, listOf(-1, 1))
             13    -> listOf(num1 + num2) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
-            14    -> listOf(num1 + num2) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
+            // 3S / 3SB / 3SB2: the wrong-place-value distractor (a − b×10) goes FIRST so it
+            // survives take(3); otherwise off-by-one / borrow candidates always crowd it out.
+            14    -> subWrongPlaceValue(num1, num2, correctAnswer).take(1) + listOf(num1 + num2) + offByOneMultidigit(correctAnswer)
             15    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer)
-            16    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
-            17    -> borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer) + subWrongPlaceValue(num1, num2, correctAnswer)
+            16    -> subWrongPlaceValue(num1, num2, correctAnswer).take(1) + borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer)
+            17    -> subWrongPlaceValue(num1, num2, correctAnswer).take(1) + borrowConfusion(num1, num2, correctAnswer) + offByOneMultidigit(correctAnswer)
 
             else  -> offByOneGeneric(correctAnswer, listOf(-1, 1, 2, 3))
         }

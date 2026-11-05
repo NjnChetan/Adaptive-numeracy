@@ -16,7 +16,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
@@ -194,6 +197,18 @@ class MainActivity : AppCompatActivity() {
         var total   = 0
         var isMarathi = false
 
+        // ── Per-panel coroutine scope ──
+        // Every delayed step (next question, "Practice Starts", mastery overlay,
+        // "all mastered" reset) runs in this scope. Home / Finish / Start cancel it,
+        // so a delay from an old session can never fire into the new one.
+        var panelJob: Job = SupervisorJob(lifecycleScope.coroutineContext[Job])
+        fun panelScope() = CoroutineScope(lifecycleScope.coroutineContext + panelJob)
+        fun cancelPending() {
+            panelJob.cancel()
+            panelJob = SupervisorJob(lifecycleScope.coroutineContext[Job])
+            panel.findViewById<View>(R.id.masteryOverlay)?.visibility = View.GONE
+        }
+
         // --- Session Statistics ---
         val conceptStats = mutableMapOf<String, Pair<Int, Int>>() // Name -> (Correct, Total)
         val masteredLevels = mutableSetOf<String>()
@@ -224,7 +239,7 @@ class MainActivity : AppCompatActivity() {
                 "OK"                         -> "ठीक आहे"
                 "🔍 Boundary Test"           -> "🔍 सीमा चाचणी"
                 // Kid-friendly mastery overlay strings
-                "Well Done! "              -> "शाब्बास! "
+                "Well Done!"                 -> "शाब्बास!"
                 "You learned this!"          -> "तुम्ही हे शिकलात!"
                 "Now let's try something new." -> "आता नवीन काही करूया."
                 // All concepts mastered strings
@@ -341,7 +356,7 @@ class MainActivity : AppCompatActivity() {
 
                 val badge = TextView(this@MainActivity).apply {
                     val isGood = cPerc >= 80
-                    text = if (isGood) "✓ Good" else "OK"
+                    text = loc(if (isGood) "✓ Good" else "OK")
                     textSize = 10f; setTypeface(null, Typeface.BOLD)
                     setPadding(8, 2, 8, 2)
                     setTextColor(if (isGood) Color.parseColor("#2E7D32") else Color.parseColor("#1A2560"))
@@ -394,7 +409,7 @@ class MainActivity : AppCompatActivity() {
             questionText.tag = null
             questionText.text = loc("🎉 All concepts mastered!")
 
-            lifecycleScope.launch(Dispatchers.Main) {
+            panelScope().launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(2000)
                 correct = 0; total = 0
                 conceptStats.clear(); masteredLevels.clear()
@@ -411,7 +426,7 @@ class MainActivity : AppCompatActivity() {
             questionText.tag = null
             questionText.text = loc("Super! You have learned it all!")
 
-            lifecycleScope.launch(Dispatchers.Main) {
+            panelScope().launch(Dispatchers.Main) {
                 kotlinx.coroutines.delay(3000)
                 sessionLogger.endSession()
                 correct = 0; total = 0
@@ -424,7 +439,7 @@ class MainActivity : AppCompatActivity() {
         fun loadQuestion() {
             answerButtons.forEach { it.isEnabled = false }
 
-            lifecycleScope.launch(Dispatchers.Default) {
+            panelScope().launch(Dispatchers.Default) {
 
                 if (engine.consumeAllMastered()) {
                     withContext(Dispatchers.Main) {
@@ -605,7 +620,7 @@ class MainActivity : AppCompatActivity() {
                             val isAssessment = engine.currentPhase == AdaptiveEngine.Phase.ASSESSMENT
                             val qNo = if (isAssessment) engine.detectionQuestionNo else engine.practiceQuestionNo
 
-                            lifecycleScope.launch(Dispatchers.Default) {
+                            panelScope().launch(Dispatchers.Default) {
                                 engine.submitAnswer(answers[i])
 
                                 if (!isAssessment) {
@@ -707,6 +722,7 @@ class MainActivity : AppCompatActivity() {
 
         startBtn.setOnClickListener {
             if (selectedOp == null) return@setOnClickListener
+            cancelPending()
             engine.startSession(selectedOp!!, selectedDigitMode ?: 1)
 
             sessionLogger.startSession()
@@ -721,6 +737,10 @@ class MainActivity : AppCompatActivity() {
             correct = 0; total = 0
             conceptStats.clear()
             masteredLevels.clear()
+            // Clear the previous session's concept chip and Q label
+            conceptsContainer?.removeAllViews()
+            scoreText?.text = ""
+            questionText.text = ""
             homeLayout.visibility = View.GONE
             quizLayout.visibility = View.VISIBLE
             btnRow1?.visibility = View.VISIBLE
@@ -728,9 +748,13 @@ class MainActivity : AppCompatActivity() {
             loadQuestion()
         }
 
-        finishBtn?.setOnClickListener { showSummary() }
+        finishBtn?.setOnClickListener {
+            cancelPending()
+            showSummary()
+        }
 
         navHome?.setOnClickListener {
+            cancelPending()
             sessionLogger.endSession()
             quizLayout.visibility = View.GONE
             homeLayout.visibility = View.VISIBLE

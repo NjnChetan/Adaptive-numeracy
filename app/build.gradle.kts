@@ -36,6 +36,10 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    // AdaptiveEngine calls android.util.Log; return defaults so JVM unit tests can run it.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
