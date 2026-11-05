@@ -1,0 +1,83 @@
+name: Android Release
+
+# Builds, tests and publishes a GitHub Release with the APK attached.
+#  - Push a tag like v1.0.0 or v1.0.0-beta.1  → release for that tag.
+#  - Tags containing "-" (beta, rc, alpha) are marked as pre-release.
+#  - Or run it by hand from the Actions tab and type a tag name.
+# The APK is debug-signed (installable on any phone for testing, not for the Play Store).
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.0-beta.2). Created on the selected branch if it does not exist.'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Version from tag
+        id: ver
+        run: |
+          NAME="${TAG#v}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *-* ]]; then echo "pre=--prerelease" >> "$GITHUB_OUTPUT"; else echo "pre=" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build APK
+        run: >
+          ./gradlew assembleDebug
+          -PappVersionName=${{ steps.ver.outputs.name }}
+          -PappVersionCode=${{ steps.ver.outputs.code }}
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/AdaptiveNumeracy-${TAG}.apk"
+          ls -la dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" dist/*.apk \
+            --title "Adaptive Numeracy $TAG" \
+            --target "$GITHUB_SHA" \
+            --generate-notes \
+            ${{ steps.ver.outputs.pre }}
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
